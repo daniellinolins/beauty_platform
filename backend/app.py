@@ -6,6 +6,9 @@ from db import close_conn
 from routes.forms import bp_forms
 from routes.submissions import bp_submissions
 
+from routes.files import bp_files
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -17,6 +20,8 @@ def create_app():
 
     app.register_blueprint(bp_forms)
     app.register_blueprint(bp_submissions)
+    app.register_blueprint(bp_files)
+
 
     @app.get("/api/health")
     def health():

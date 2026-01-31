@@ -74,6 +74,21 @@ export class FormFillPage implements OnInit {
 
     this.api.getLatestFormVersion(this.tenantId, this.idForm).subscribe({
       next: (fv) => {
+        const s = String(fv.schema_json);
+        console.log('[DEBUG] char around error:', s.slice(1560, 1630));
+                
+        console.log('[DEBUG] schema_json typeof:', typeof fv.schema_json);
+        console.log('[DEBUG] schema_json preview:', String(fv.schema_json).slice(0, 250));
+
+        try {
+          const parsed = JSON.parse(fv.schema_json);
+          console.log('[DEBUG] parsed keys:', Object.keys(parsed));
+          console.log('[DEBUG] parsed.sections length:', parsed?.sections?.length);
+          console.log('[DEBUG] first type:', parsed?.sections?.[0]?.elements?.[0]?.type);
+        } catch (e) {
+          console.log('[DEBUG] JSON.parse failed:', e);
+        }        
+
         this.formVersion = fv;
 
         this.schemaRawType = typeof fv?.schema_json;
@@ -102,23 +117,33 @@ export class FormFillPage implements OnInit {
   /**
    * Se vier string JSON, faz parse.
    */
-  private normalizeSchema(schemaAny: any): any | null {
-    if (schemaAny == null) return null;
+private normalizeSchema(schemaAny: any): any | null {
+  if (schemaAny == null) return null;
 
-    if (typeof schemaAny === 'string') {
-      try {
-        return JSON.parse(schemaAny);
-      } catch (e) {
-        if (this.debug) {
-          // eslint-disable-next-line no-console
-          console.error('[FormFill] Failed to parse schema_json string:', e);
+  // tentativa 1
+  if (typeof schemaAny === 'string') {
+    try {
+      const parsed1 = JSON.parse(schemaAny);
+
+      // se ainda for string, tenta de novo (double-encoded)
+      if (typeof parsed1 === 'string') {
+        try {
+          return JSON.parse(parsed1);
+        } catch {
+          return parsed1; // já é string “conteúdo”
         }
-        return null;
       }
-    }
 
-    return schemaAny;
+      return parsed1;
+    } catch (e) {
+      if (this.debug) console.error('[FormFill] Failed to parse schema_json string:', e);
+      return null;
+    }
   }
+
+  return schemaAny;
+}
+
 
   /**
    * Extrai elements do schema no formato:

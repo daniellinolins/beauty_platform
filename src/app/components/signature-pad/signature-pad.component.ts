@@ -6,10 +6,13 @@ import {
   ViewChild,
   OnDestroy,
 } from '@angular/core';
-import { ModalController } from '@ionic/angular';
+import { CommonModule } from '@angular/common';
+import { IonicModule, ModalController } from '@ionic/angular';
 
 @Component({
   selector: 'app-signature-pad',
+  standalone: true,
+  imports: [CommonModule, IonicModule],
   templateUrl: './signature-pad.component.html',
   styleUrls: ['./signature-pad.component.scss'],
 })
@@ -29,8 +32,6 @@ export class SignaturePadComponent implements AfterViewInit, OnDestroy {
   private resizeObserver?: ResizeObserver;
 
   hasStroke = false;
-
-  // Ajuste fino do traço
   private lineWidth = 2.2;
 
   constructor(private modalCtrl: ModalController) {}
@@ -38,12 +39,10 @@ export class SignaturePadComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit() {
     this.setupCanvas();
 
-    // Reajusta o canvas se o container mudar de tamanho (rotação tablet etc.)
     const canvas = this.canvasRef.nativeElement;
     const parent = canvas.parentElement;
     if (parent && 'ResizeObserver' in window) {
       this.resizeObserver = new ResizeObserver(() => {
-        // mantém desenho? (por simplicidade, não mantém)
         this.setupCanvas();
       });
       this.resizeObserver.observe(parent);
@@ -60,11 +59,9 @@ export class SignaturePadComponent implements AfterViewInit, OnDestroy {
     const canvas = this.canvasRef.nativeElement;
     const parent = canvas.parentElement;
 
-    // tamanho “visual”
     const width = parent ? parent.clientWidth : 320;
     const height = 220;
 
-    // densidade (retina)
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.floor(width * dpr);
     canvas.height = Math.floor(height * dpr);
@@ -75,20 +72,16 @@ export class SignaturePadComponent implements AfterViewInit, OnDestroy {
     if (!ctx) throw new Error('Canvas 2D context not available');
     this.ctx = ctx;
 
-    // reset e escala
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // fundo branco para PNG ficar “bonito”
     this.ctx.fillStyle = this.background;
     this.ctx.fillRect(0, 0, width, height);
 
-    // estilo do traço
     this.ctx.strokeStyle = '#111';
     this.ctx.lineWidth = this.lineWidth;
     this.ctx.lineJoin = 'round';
     this.ctx.lineCap = 'round';
 
-    // reset flags
     this.hasStroke = false;
     this.drawing = false;
   }
@@ -101,10 +94,10 @@ export class SignaturePadComponent implements AfterViewInit, OnDestroy {
     this.modalCtrl.dismiss({ ok: false });
   }
 
-  async save() {
+  async save(): Promise<void> {
     if (!this.hasStroke) {
-      // se quiser forçar obrigatório, trate no FormFill (required)
-      return this.modalCtrl.dismiss({ ok: false, empty: true });
+      this.modalCtrl.dismiss({ ok: false, empty: true });
+      return;
     }
 
     const canvas = this.canvasRef.nativeElement;
@@ -114,7 +107,8 @@ export class SignaturePadComponent implements AfterViewInit, OnDestroy {
     );
 
     if (!blob) {
-      return this.modalCtrl.dismiss({ ok: false, error: 'blob_failed' });
+      this.modalCtrl.dismiss({ ok: false, error: 'blob_failed' });
+      return;
     }
 
     this.modalCtrl.dismiss({
@@ -123,8 +117,6 @@ export class SignaturePadComponent implements AfterViewInit, OnDestroy {
       blob,
     });
   }
-
-  // ====== Pointer Events (funciona em mouse/touch/caneta) ======
 
   onPointerDown(ev: PointerEvent) {
     ev.preventDefault();
@@ -163,9 +155,6 @@ export class SignaturePadComponent implements AfterViewInit, OnDestroy {
   private getCanvasPoint(ev: PointerEvent) {
     const canvas = this.canvasRef.nativeElement;
     const rect = canvas.getBoundingClientRect();
-    return {
-      x: ev.clientX - rect.left,
-      y: ev.clientY - rect.top,
-    };
+    return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
   }
 }

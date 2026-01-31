@@ -1,0 +1,119 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Preencher</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+
+  <ion-text color="danger" *ngIf="errorMsg">
+    <p>{{ errorMsg }}</p>
+  </ion-text>
+
+  <ion-spinner *ngIf="loading"></ion-spinner>
+
+  <!-- fallback: evita tela branca -->
+  <ion-text *ngIf="!loading && elements.length === 0 && !errorMsg" color="medium">
+    <p>
+      Nenhum elemento foi carregado para este formulário.
+      <br />
+      <span *ngIf="schemaRawType">Tipo recebido de schema_json: <b>{{ schemaRawType }}</b></span>
+    </p>
+    <p style="font-size: 0.9em; opacity: 0.8;">
+      Dica: confirme se o form_version está PUBLISHED e se schema_json contém sections[].elements[].
+    </p>
+  </ion-text>
+
+  <!-- Render do formulário -->
+  <div *ngIf="!loading && elements.length > 0">
+    <ng-container *ngFor="let e of elements; trackBy: trackByIndex">
+
+      <!-- TITLE -->
+      <h1 *ngIf="e.type === 'TITLE'" style="margin-top: 12px;">
+        {{ getTextLocalized(e.text) }}
+      </h1>
+
+      <!-- SUBTITLE -->
+      <h2 *ngIf="e.type === 'SUBTITLE'" style="margin-top: 12px;">
+        {{ getTextLocalized(e.text) }}
+      </h2>
+
+      <!-- TEXT_BLOCK -->
+      <p *ngIf="e.type === 'TEXT_BLOCK'" style="white-space: pre-wrap; margin-top: 8px;">
+        {{ getTextLocalized(e.text) }}
+      </p>
+
+      <!-- DIVIDER -->
+      <hr *ngIf="e.type === 'DIVIDER'" style="margin: 14px 0;" />
+
+      <!-- FIELD -->
+      <div *ngIf="e.type === 'FIELD'" style="margin-top: 10px;">
+        <ion-item lines="full">
+          <ion-label position="stacked">{{ getTextLocalized(e.field.label) }}</ion-label>
+
+          <!-- TEXT -->
+          <ion-input
+            *ngIf="e.field.input_type === 'TEXT'"
+            [value]="payload[e.field.key]"
+            (ionInput)="updateField(e.field.key, $event.detail.value)">
+          </ion-input>
+
+          <!-- TEXTAREA -->
+          <ion-textarea
+            *ngIf="e.field.input_type === 'TEXTAREA'"
+            [value]="payload[e.field.key]"
+            autoGrow="true"
+            (ionInput)="updateField(e.field.key, $event.detail.value)">
+          </ion-textarea>
+
+          <!-- DATE -->
+          <ion-datetime
+            *ngIf="e.field.input_type === 'DATE'"
+            presentation="date"
+            (ionChange)="updateField(e.field.key, $event.detail.value)">
+          </ion-datetime>
+
+          <!-- BOOL -->
+          <ion-toggle
+            *ngIf="e.field.input_type === 'BOOL'"
+            [checked]="payload[e.field.key] === true"
+            (ionChange)="updateField(e.field.key, $event.detail.checked)">
+          </ion-toggle>
+
+          <!-- SINGLE_CHOICE -->
+          <ion-select
+            *ngIf="e.field.input_type === 'SINGLE_CHOICE'"
+            [value]="payload[e.field.key]"
+            (ionChange)="updateField(e.field.key, $event.detail.value)">
+            <ion-select-option *ngFor="let opt of e.field.options" [value]="opt.value">
+              {{ getTextLocalized(opt.label) }}
+            </ion-select-option>
+          </ion-select>
+
+        </ion-item>
+      </div>
+
+    </ng-container>
+
+    <!-- Dica de comportamento -->
+    <ion-text color="medium">
+      <p style="margin-top: 14px; font-size: 0.9em; opacity: 0.8;">
+        Nota: o registro (submission) só será criado no primeiro “Salvar”.
+      </p>
+    </ion-text>
+
+    <ion-button
+      expand="block"
+      style="margin-top: 14px;"
+      [disabled]="!canSave()"
+      (click)="save()">
+      <span *ngIf="!saving">Salvar</span>
+      <span *ngIf="saving">Salvando…</span>
+    </ion-button>
+
+    <ion-text *ngIf="submissionId">
+      <p style="opacity: .7;">Submission ID: {{ submissionId }}</p>
+    </ion-text>
+  </div>
+
+</ion-content>

@@ -103,18 +103,48 @@
           </ion-select>
         </ion-item>
 
-        <!-- PHOTO (placeholder neutro: não adiciona feature) -->
+        <!-- PHOTO -->
         <ion-item *ngIf="e.field.input_type === 'PHOTO'">
           <ion-label style="white-space: normal;">
             {{ getTextLocalized(e.field.label) }}
           </ion-label>
 
-          <ion-text color="medium">
+          <ion-button
+            slot="end"
+            fill="outline"
+            color="primary"
+            (click)="capturePhoto(e.field.key, e.field.photo_purpose)"
+          >
+            Tirar foto
+          </ion-button>
+        </ion-item>
+
+        <div *ngIf="e.field.input_type === 'PHOTO'" style="margin: 8px 0 14px 0;">
+          <div *ngIf="getPhotoPreview(e.field.key)" style="margin-top: 8px;">
+            <img
+              [src]="getPhotoPreview(e.field.key)!"
+              alt="Pré-visualização"
+              style="width: 100%; max-width: 220px; border-radius: 8px; border: 1px solid #ddd;"
+            />
+          </div>
+
+          <ion-text *ngIf="getPayloadValue(e.field.key)?.id_file_object">
             <p style="margin-top: 8px;">
-              (Campo FOTO ainda não implementado neste template)
+              Foto associada: {{ getPayloadValue(e.field.key).id_file_object }}
             </p>
           </ion-text>
-        </ion-item>
+
+          <ion-button
+            *ngIf="getPayloadValue(e.field.key)?.id_file_object || getPhotoPreview(e.field.key)"
+            size="small"
+            color="medium"
+            fill="clear"
+            (click)="removePhoto(e.field.key)"
+            style="margin-top: 6px; padding-left: 0;"
+          >
+            Remover foto
+          </ion-button>
+        </div>
 
         <!-- SIGNATURE -->
         <ion-item *ngIf="e.field.input_type === 'SIGNATURE'">

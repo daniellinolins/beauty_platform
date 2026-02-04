@@ -1,0 +1,48 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>{{ title }}</ion-title>
+    <ion-buttons slot="end">
+      <ion-button (click)="cancel()">Fechar</ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <p class="hint">{{ hint }}</p>
+
+  <ion-text color="danger" *ngIf="errMsg">
+    <p>{{ errMsg }}</p>
+  </ion-text>
+
+  <ion-button expand="block" (click)="takePhoto()">
+    Abrir câmera
+  </ion-button>
+
+  <div *ngIf="!platform.is('hybrid')" style="margin-top: 12px;">
+    <input
+      type="file"
+      accept="image/*"
+      capture="environment"
+      (change)="onFilePicked($event)"
+    />
+  </div>
+
+  <ion-card class="preview-card" *ngIf="previewUrl">
+    <img [src]="previewUrl" alt="Pré-visualização" />
+  </ion-card>
+
+  <ion-grid>
+    <ion-row>
+      <ion-col size="6">
+        <ion-button expand="block" color="medium" (click)="clear()">
+          Limpar
+        </ion-button>
+      </ion-col>
+      <ion-col size="6">
+        <ion-button expand="block" (click)="save()" [disabled]="!blob">
+          Guardar
+        </ion-button>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
+</ion-content>

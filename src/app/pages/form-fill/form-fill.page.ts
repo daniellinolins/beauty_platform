@@ -1,344 +1,328 @@
-import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-
 import {
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonText,
-  IonSpinner,
+  IonBackButton,
   IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonInput,
   IonItem,
   IonLabel,
-  IonInput,
-  IonTextarea,
-  IonDatetime,
+  IonModal,
+  IonSpinner,
+  IonText,
+  IonTitle,
   IonToggle,
+  IonToolbar,
+  IonTextarea,
   IonSelect,
   IonSelectOption,
-  IonCard,
-  IonCardContent,
 } from '@ionic/angular/standalone';
+import { firstValueFrom, Subject, takeUntil } from 'rxjs';
+import { ApiService } from 'src/app/services/api';
 
-import { ApiService } from '../../services/api';
-
-import { ModalController } from '@ionic/angular';
 import { SignaturePadComponent } from '../../components/signature-pad/signature-pad.component';
+
+type LocalizedText = Record<string, string>;
+
+type FormField = {
+  key: string;
+  label?: LocalizedText;
+  input_type:
+    | 'TEXT'
+    | 'TEXTAREA'
+    | 'NUMBER'
+    | 'DATE'
+    | 'BOOL'
+    | 'SINGLE_CHOICE'
+    | 'PHOTO'
+    | 'SIGNATURE';
+  required?: boolean;
+  options?: Array<{ value: string; label?: LocalizedText }>;
+  multiple?: boolean;
+  photo_purpose?: string;
+};
+
+type FormElement =
+  | { type: 'TITLE' | 'SUBTITLE' | 'TEXT_BLOCK'; text: LocalizedText }
+  | { type: 'DIVIDER' }
+  | { type: 'FIELD'; field: FormField };
+
+type FormSchema = {
+  schema_version: string;
+  default_language: string;
+  sections: Array<{
+    id: string;
+    title?: LocalizedText;
+    elements: FormElement[];
+  }>;
+};
 
 @Component({
   selector: 'app-form-fill',
-  templateUrl: './form-fill.page.html',
-  styleUrls: ['./form-fill.page.scss'],
   standalone: true,
+  templateUrl: './form-fill.page.html',
   imports: [
     CommonModule,
     IonHeader,
     IonToolbar,
     IonTitle,
+    IonButtons,
+    IonBackButton,
     IonContent,
     IonText,
     IonSpinner,
-    IonButton,
     IonItem,
     IonLabel,
     IonInput,
     IonTextarea,
-    IonDatetime,
     IonToggle,
     IonSelect,
     IonSelectOption,
-    IonCard,
-    IonCardContent,
+    IonButton,
+    IonModal,
+    SignaturePadComponent,
   ],
 })
-export class FormFillPage implements OnInit {
-  // Contexto fixo (por enquanto)
+export class FormFillPage implements OnInit, OnDestroy {
+  private destroy$ = new Subject<void>();
+
   tenantId = 1;
+
+  // placeholders atuais (mantendo tua abordagem)
   clinicId = 1;
-  clientId = 1;
 
-  idForm!: number;
+  // backend exige client_id numérico (não pode ser null)
+  clientId: number = 1;
 
-  // Loading do schema do formulário
-  loading = true;
+  idForm = 0;
+  idFormVersion = 0;
 
-  // Loading de operações de persistência
-  saving = false;
+  loading = false;
+  errorMsg = '';
 
-  errorMsg: string | null = null;
-
-  formVersion: any = null;
-  elements: any[] = [];
-
-  // ✅ agora só é criado no 1º Save
-  submissionId: number | null = null;
-
-  // Debug opcional
-  debug = true;
-  schemaRawType: string | null = null;
+  defaultLang = 'pt-PT';
+  elements: FormElement[] = [];
 
   payload: Record<string, any> = {};
+  submissionId: number | null = null;
 
-  constructor(
-    private route: ActivatedRoute,
-    private api: ApiService,
-    private modalCtrl: ModalController,
-  ) {}
+  // --- Assinatura ---
+  @ViewChild('signatureModal', { static: false }) signatureModal?: IonModal;
+  @ViewChild('sigPad') sigPad?: SignaturePadComponent;
+
+  signatureFieldKey: string | null = null;
+
+  signaturePadOptions: any = {
+    penColor: '#000',
+    lineWidth: 2,
+    backgroundColor: '#fff',
+    minWidth: 1,
+    maxWidth: 2.5,
+  };
+
+  constructor(private route: ActivatedRoute, private api: ApiService) {}
 
   ngOnInit() {
-    this.idForm = Number(this.route.snapshot.paramMap.get('id_form'));
-    this.loadSchemaOnly();
+    // aceita os dois nomes (id_form e idForm) para evitar quebra por rota
+    const p1 = this.route.snapshot.paramMap.get('id_form');
+    const p2 = this.route.snapshot.paramMap.get('idForm');
+    this.idForm = Number(p1 || p2 || 0);
+
+    this.loadForm();
   }
 
-  /**
-   * ✅ Carrega apenas o schema (não cria submission)
-   */
-  loadSchemaOnly() {
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  async loadForm() {
     this.loading = true;
-    this.errorMsg = null;
+    this.errorMsg = '';
     this.elements = [];
-    this.formVersion = null;
-
-    this.api.getLatestFormVersion(this.tenantId, this.idForm).subscribe({
-      next: (fv) => {
-        const s = String(fv.schema_json);
-        console.log('[DEBUG] char around error:', s.slice(1560, 1630));
-
-        console.log('[DEBUG] schema_json typeof:', typeof fv.schema_json);
-        console.log(
-          '[DEBUG] schema_json preview:',
-          String(fv.schema_json).slice(0, 250),
-        );
-
-        try {
-          const parsed = JSON.parse(fv.schema_json);
-          console.log('[DEBUG] parsed keys:', Object.keys(parsed));
-          console.log(
-            '[DEBUG] parsed.sections length:',
-            parsed?.sections?.length,
-          );
-          console.log(
-            '[DEBUG] first type:',
-            parsed?.sections?.[0]?.elements?.[0]?.type,
-          );
-        } catch (e) {
-          console.log('[DEBUG] JSON.parse failed:', e);
-        }
-
-        this.formVersion = fv;
-
-        this.schemaRawType = typeof fv?.schema_json;
-
-        const schemaObj = this.normalizeSchema(fv?.schema_json);
-        this.elements = this.flattenElements(schemaObj);
-
-        if (this.debug) {
-          // eslint-disable-next-line no-console
-          console.log('[FormFill] schema_json typeof:', this.schemaRawType);
-          // eslint-disable-next-line no-console
-          console.log('[FormFill] elements count:', this.elements.length);
-          // eslint-disable-next-line no-console
-          console.log('[FormFill] first elements:', this.elements.slice(0, 5));
-        }
-
-        this.loading = false;
-      },
-      error: (err) => {
-        this.errorMsg =
-          err?.error?.message ||
-          err?.message ||
-          'Erro ao carregar versão do formulário';
-        this.loading = false;
-      },
-    });
-  }
-
-  /**
-   * Se vier string JSON, faz parse.
-   */
-  private normalizeSchema(schemaAny: any): any | null {
-    if (schemaAny == null) return null;
-
-    // tentativa 1
-    if (typeof schemaAny === 'string') {
-      try {
-        const parsed1 = JSON.parse(schemaAny);
-
-        // se ainda for string, tenta de novo (double-encoded)
-        if (typeof parsed1 === 'string') {
-          try {
-            return JSON.parse(parsed1);
-          } catch {
-            return parsed1; // já é string “conteúdo”
-          }
-        }
-
-        return parsed1;
-      } catch (e) {
-        if (this.debug)
-          console.error('[FormFill] Failed to parse schema_json string:', e);
-        return null;
-      }
-    }
-
-    return schemaAny;
-  }
-
-  /**
-   * Extrai elements do schema no formato:
-   * schema.sections[].elements[]
-   */
-  private flattenElements(schemaAny: any): any[] {
-    const schema = this.normalizeSchema(schemaAny);
-    if (!schema) return [];
-
-    const root = schema?.schema_json
-      ? this.normalizeSchema(schema.schema_json)
-      : schema;
-
-    const sections = root?.sections;
-    if (Array.isArray(sections)) {
-      const out: any[] = [];
-      for (const s of sections) {
-        const els = s?.elements;
-        if (Array.isArray(els)) out.push(...els);
-      }
-      return out;
-    }
-
-    if (Array.isArray(root?.elements)) return root.elements;
-
-    return [];
-  }
-
-  getTextLocalized(obj: any): string {
-    if (!obj) return '';
-    return obj['pt-PT'] || obj['pt'] || obj['en-US'] || '';
-  }
-
-  trackByIndex(i: number) {
-    return i;
-  }
-
-  updateField(key: string, value: any) {
-    this.payload[key] = value;
-  }
-
-  /**
-   * ✅ Primeiro Save:
-   * 1) cria submission
-   * 2) salva payload
-   *
-   * Próximos Saves:
-   * - só salva payload
-   */
-  async save() {
-    this.errorMsg = null;
-
-    // sem schema carregado, não tem o que salvar
-    if (!this.formVersion?.id_form_version) {
-      this.errorMsg =
-        'Formulário ainda não carregou corretamente (sem versão).';
-      return;
-    }
-
-    if (this.saving) return;
-
-    this.saving = true;
 
     try {
-      // 1) Se ainda não existe submission, cria agora (primeiro save)
-      if (!this.submissionId) {
-        const req = {
-          tenant_id: this.tenantId,
-          clinic_id: this.clinicId,
-          client_id: this.clientId,
-          id_form: this.idForm,
-          id_form_version: this.formVersion.id_form_version,
-        };
+      const fv = await firstValueFrom(
+        this.api.getLatestFormVersion(this.tenantId, this.idForm).pipe(takeUntil(this.destroy$)),
+      );
 
-        const sub = await this.api.createSubmission(req).toPromise();
-        this.submissionId = sub?.id_form_submission;
+      this.idFormVersion = Number(fv?.id_form_version || 0);
 
-        if (!this.submissionId) {
-          throw new Error(
-            'Falha ao criar submission (id_form_submission não retornou).',
-          );
-        }
+      const raw = fv?.schema_json;
+      if (!raw) {
+        this.errorMsg = 'Schema não encontrado.';
+        return;
       }
 
-      // 2) Salva payload
-      await this.api
-        .saveSubmissionPayload(this.submissionId, this.tenantId, this.payload)
-        .toPromise();
-    } catch (err: any) {
-      this.errorMsg = err?.error?.message || err?.message || 'Erro ao salvar';
+      const parsed: FormSchema = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+      this.defaultLang = parsed?.default_language || 'pt-PT';
+
+      const sections = Array.isArray(parsed?.sections) ? parsed.sections : [];
+      this.elements = sections.reduce<FormElement[]>((acc, s) => {
+        const els = Array.isArray(s?.elements) ? s.elements : [];
+        return acc.concat(els);
+      }, []);
+
+      if (this.elements.length === 0) {
+        this.errorMsg = 'Nenhum campo encontrado neste formulário.';
+      }
+    } catch (e) {
+      this.errorMsg = 'Erro ao carregar formulário.';
+      console.error(e);
     } finally {
-      this.saving = false;
+      this.loading = false;
     }
   }
 
-  /**
-   * Botão salvar habilita mesmo sem submission:
-   * ✅ porque o 1º clique cria a submission
-   */
-  canSave(): boolean {
+  getTextLocalized(txt?: LocalizedText): string {
+    if (!txt) return '';
     return (
-      !this.loading &&
-      this.elements.length > 0 &&
-      !this.saving &&
-      !this.errorMsg
+      txt[this.defaultLang] ||
+      txt['pt-PT'] ||
+      txt['pt-BR'] ||
+      txt['en-US'] ||
+      Object.values(txt)[0] ||
+      ''
     );
   }
 
-  async captureSignature(fieldKey: string) {
-    const tenantId = this.tenantId;
-    const clinicId = this.clinicId;
-    const clientId = this.clientId;
+  getPayloadValue(key?: string): any {
+    if (!key) return null;
+    return this.payload[key];
+  }
 
-    const modal = await this.modalCtrl.create({
-      component: SignaturePadComponent,
-      componentProps: {
-        title: 'Assinatura do Cliente',
-        hint: 'Assine com o dedo ou caneta. Depois toque em Guardar.',
-      },
-    });
+  setPayloadValue(key?: string, value?: any) {
+    if (!key) return;
+    this.payload[key] = value;
+  }
 
-    await modal.present();
-    const { data } = await modal.onDidDismiss();
+  onSignatureModalDidPresent() {
+    this.sigPad?.resizeCanvas();
+  }
 
-    if (!data?.ok || !data?.blob) {
+  async openSignature(fieldKey: string) {
+    this.errorMsg = '';
+    this.signatureFieldKey = fieldKey;
+
+    await this.signatureModal?.present();
+
+    setTimeout(() => {
+      try {
+        this.sigPad?.resizeCanvas();
+        this.sigPad?.clear();
+      } catch (e) {
+        console.error('SignaturePad resize/clear failed', e);
+      }
+    }, 80);
+  }
+
+  clearSignature() {
+    try {
+      this.sigPad?.clear();
+    } catch {}
+  }
+
+  async saveSignatureToPayload() {
+    if (!this.signatureFieldKey) return;
+
+    const isEmpty = this.sigPad?.isEmpty?.() === true;
+    if (isEmpty) {
+      this.errorMsg = 'Assine antes de guardar.';
       return;
     }
 
-    // 1) upload no backend
-    const filename = `signature_${clientId}_${Date.now()}.png`;
+    const dataUrl: string | undefined = this.sigPad?.toDataURL?.('image/png');
+    if (!dataUrl) {
+      this.errorMsg = 'Não foi possível capturar a assinatura.';
+      return;
+    }
+
+    const file = this.dataUrlToFile(dataUrl, `signature_${Date.now()}.png`);
 
     try {
-      const resp = await this.api
-        .uploadFile(tenantId, data.blob, filename, 'signatures', 'SIGNATURE')
-        .toPromise();
+      const uploaded = await firstValueFrom(
+        this.api
+          .uploadFile(this.tenantId, file, file.name, 'signatures', 'SIGNATURE')
+          .pipe(takeUntil(this.destroy$)),
+      );
 
-      // 2) gravar no payload
-      this.payload[fieldKey] = {
-        file_id: resp.id_file_object,
-        type: 'SIGNATURE',
-      };
+      // ✅ backend retorna id_file_object (não id_file)
+      const fileObjectId = uploaded?.id_file_object;
+      if (!fileObjectId) {
+        this.errorMsg = 'Upload da assinatura falhou (id_file_object vazio).';
+        console.error('Upload response:', uploaded);
+        return;
+      }
 
-      // 3) montar o signature_meta (modelo auditável)
-      this.payload['consent.signature_meta'] = {
-        signed_at: resp.signed_at_utc,
-        device: navigator.userAgent,
-        ip: resp.ip,
-        app_version: '0.1.0',
-        clinic_id: clinicId,
-        client_id: clientId,
-        tenant_id: tenantId,
-        file_sha256: resp.sha256,
-      };
-    } catch (e: any) {
+      // salva no payload
+      this.setPayloadValue(this.signatureFieldKey, {
+        id_file_object: fileObjectId,
+        kind: 'SIGNATURE',
+      });
+
+      await this.signatureModal?.dismiss();
+      this.signatureFieldKey = null;
+      this.errorMsg = '';
+    } catch (e) {
+      this.errorMsg = 'Erro ao enviar assinatura.';
+      console.error(e);
+    }
+  }
+
+  private dataUrlToFile(dataUrl: string, filename: string): File {
+    const arr = dataUrl.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) u8arr[n] = bstr.charCodeAt(n);
+    return new File([u8arr], filename, { type: mime });
+  }
+
+  async save() {
+    this.errorMsg = '';
+
+    if (!this.idFormVersion) {
+      this.errorMsg = 'Versão do formulário inválida.';
+      return;
+    }
+
+    try {
+      if (!this.submissionId) {
+        const created = await firstValueFrom(
+          this.api
+            .createSubmission({
+              tenant_id: this.tenantId,
+              clinic_id: this.clinicId,
+              client_id: this.clientId,
+              id_form: this.idForm,
+              id_form_version: this.idFormVersion,
+            })
+            .pipe(takeUntil(this.destroy$)),
+        );
+
+        this.submissionId = created?.id_form_submission ?? null;
+      }
+
+      if (!this.submissionId) {
+        this.errorMsg = 'Não foi possível criar a submissão.';
+        return;
+      }
+
+      await firstValueFrom(
+        this.api
+          .saveSubmissionPayload(this.submissionId, this.tenantId, this.payload)
+          .pipe(takeUntil(this.destroy$)),
+      );
+
+      this.errorMsg = '';
+    } catch (e) {
+      this.errorMsg = 'Erro ao guardar.';
       console.error(e);
     }
   }

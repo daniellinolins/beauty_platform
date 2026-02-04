@@ -11,14 +11,21 @@ const routes: Routes = [
     path: 'folder/:id',
     loadChildren: () => import('./folder/folder.module').then( m => m.FolderPageModule)
   },
-{
-  path: 'forms',
-  loadComponent: () => import('./pages/form-list/form-list.page').then(m => m.FormListPage)
-},
-{
-  path: 'forms/fill/:id_form',
-  loadComponent: () => import('./pages/form-fill/form-fill.page').then(m => m.FormFillPage)
-},
+  {
+    path: '',
+    redirectTo: 'forms',
+    pathMatch: 'full',
+  },
+  {
+    path: 'forms',
+    loadComponent: () =>
+      import('./pages/form-list/form-list.page').then((m) => m.FormListPage),
+  },
+  {
+    path: 'forms/fill/:idForm',
+    loadComponent: () =>
+      import('./pages/form-fill/form-fill.page').then((m) => m.FormFillPage),
+  },
 
 
 ];

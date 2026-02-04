@@ -21,8 +21,8 @@ def list_forms():
 
     return jsonify(rows)
 
-@bp_forms.get("/api/forms/<int:id_form>/versions/latest")
-def get_latest_published_version(id_form: int):
+@bp_forms.get("/api/forms/<int:idForm>/versions/latest")
+def get_latest_published_version(idForm: int):
     tenant_id = request.args.get("tenant_id", type=int)
     if not tenant_id:
         return jsonify({"message": "tenant_id is required"}), 400
@@ -40,7 +40,7 @@ def get_latest_published_version(id_form: int):
           AND deleted_at IS NULL
         ORDER BY version_number DESC
         LIMIT 1
-    """, {"tenant_id": tenant_id, "id_form": id_form})
+    """, {"tenant_id": tenant_id, "id_form": idForm})
 
     if not row:
         return jsonify({"message": "No published version found for this form"}), 404

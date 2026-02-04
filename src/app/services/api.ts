@@ -1,62 +1,53 @@
-import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 
-@Injectable({
-  providedIn: 'root',
-})
+@Injectable({ providedIn: 'root' })
 export class ApiService {
-  private baseUrl = environment.apiBaseUrl;
+  private baseUrl = `${environment.apiBaseUrl}/api`;
 
   constructor(private http: HttpClient) {}
 
-  health() {
-    return this.http.get<{ status: string; db: number }>(
-      `${this.baseUrl}/api/health`,
-    );
+  listForms(tenantId: number): Observable<any> {
+    return this.http.get(`${this.baseUrl}/forms`, { params: { tenant_id: tenantId } });
   }
 
-  listForms(tenantId: number) {
-    return this.http.get<any[]>(`${this.baseUrl}/api/forms?tenant_id=${tenantId}`);
+  getLatestFormVersion(tenantId: number, idForm: number): Observable<any> {
+    return this.http.get(`${this.baseUrl}/forms/${idForm}/versions/latest`, {
+      params: { tenant_id: tenantId },
+    });
   }
 
-  getLatestFormVersion(tenantId: number, idForm: number) {
-    return this.http.get<any>(
-      `${this.baseUrl}/api/forms/${idForm}/versions/latest?tenant_id=${tenantId}`,
-    );
+  createSubmission(req: {
+    tenant_id: number;
+    clinic_id: number;
+    client_id: number;
+    id_form: number;
+    id_form_version: number;
+  }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/form-submissions`, req);
   }
 
-  createSubmission(payload: any) {
-    return this.http.post<any>(`${this.baseUrl}/api/form-submissions`, payload);
-  }
-
-  saveSubmissionPayload(
-    idSubmission: number,
-    tenantId: number,
-    payloadJson: any,
-  ) {
-    return this.http.put<any>(
-      `${this.baseUrl}/api/form-submissions/${idSubmission}/payload`,
-      {
-        tenant_id: tenantId,
-        payload_json: payloadJson,
-      },
-    );
+  saveSubmissionPayload(submissionId: number, tenantId: number, payload: any): Observable<any> {
+    return this.http.put(`${this.baseUrl}/form-submissions/${submissionId}/payload`, {
+      tenant_id: tenantId,
+      payload_json: payload,
+    });
   }
 
   uploadFile(
     tenantId: number,
-    blob: Blob,
+    blobOrFile: Blob,
     filename: string,
-    category: 'signatures' | 'photos' | 'pdfs',
-    purpose?: string,
-  ) {
-    const form = new FormData();
-    form.append('tenant_id', String(tenantId));
-    form.append('category', category);
-    if (purpose) form.append('purpose', purpose);
-    form.append('file', blob, filename);
-
-    return this.http.post<any>(`${this.baseUrl}/api/files`, form);
+    category: string,
+    purpose: string,
+  ): Observable<any> {
+    const fd = new FormData();
+    fd.append('file', blobOrFile, filename);
+    fd.append('tenant_id', String(tenantId));
+    fd.append('category', category);
+    fd.append('purpose', purpose);
+    return this.http.post(`${this.baseUrl}/files`, fd);
   }
 }

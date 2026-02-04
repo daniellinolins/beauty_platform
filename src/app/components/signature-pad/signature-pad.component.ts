@@ -4,157 +4,143 @@ import {
   ElementRef,
   Input,
   ViewChild,
-  OnDestroy,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { IonicModule, ModalController } from '@ionic/angular';
+
+export type SignaturePadOptions = {
+  penColor?: string;          // default '#000'
+  lineWidth?: number;         // default 2
+  backgroundColor?: string;   // default 'transparent' | '#fff'
+  minWidth?: number;          // compat (se vier do código antigo)
+  maxWidth?: number;          // compat (se vier do código antigo)
+};
 
 @Component({
-  selector: 'app-signature-pad',
+  selector: 'signature-pad',
   standalone: true,
-  imports: [CommonModule, IonicModule],
+  imports: [CommonModule],
   templateUrl: './signature-pad.component.html',
   styleUrls: ['./signature-pad.component.scss'],
 })
-export class SignaturePadComponent implements AfterViewInit, OnDestroy {
-  @Input() title: string = 'Assinatura';
-  @Input() hint: string = 'Assine com o dedo ou caneta.';
-  @Input() background: string = '#ffffff';
+export class SignaturePadComponent implements AfterViewInit {
+  @ViewChild('canvas', { static: true }) canvasRef!: ElementRef<HTMLCanvasElement>;
 
-  @ViewChild('canvas', { static: true })
-  canvasRef!: ElementRef<HTMLCanvasElement>;
+  @Input() options: SignaturePadOptions = {
+    penColor: '#000',
+    lineWidth: 2,
+    backgroundColor: 'transparent',
+  };
 
   private ctx!: CanvasRenderingContext2D;
   private drawing = false;
-  private lastX = 0;
-  private lastY = 0;
+  private empty = true;
+  private last: { x: number; y: number } | null = null;
 
-  private resizeObserver?: ResizeObserver;
-
-  hasStroke = false;
-  private lineWidth = 2.2;
-
-  constructor(private modalCtrl: ModalController) {}
-
-  ngAfterViewInit() {
-    this.setupCanvas();
-
+  ngAfterViewInit(): void {
     const canvas = this.canvasRef.nativeElement;
-    const parent = canvas.parentElement;
-    if (parent && 'ResizeObserver' in window) {
-      this.resizeObserver = new ResizeObserver(() => {
-        this.setupCanvas();
-      });
-      this.resizeObserver.observe(parent);
-    }
-  }
-
-  ngOnDestroy() {
-    try {
-      this.resizeObserver?.disconnect();
-    } catch {}
-  }
-
-  private setupCanvas() {
-    const canvas = this.canvasRef.nativeElement;
-    const parent = canvas.parentElement;
-
-    const width = parent ? parent.clientWidth : 320;
-    const height = 220;
-
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(width * dpr);
-    canvas.height = Math.floor(height * dpr);
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D context not available');
     this.ctx = ctx;
 
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    this.ctx.fillStyle = this.background;
-    this.ctx.fillRect(0, 0, width, height);
-
-    this.ctx.strokeStyle = '#111';
-    this.ctx.lineWidth = this.lineWidth;
-    this.ctx.lineJoin = 'round';
-    this.ctx.lineCap = 'round';
-
-    this.hasStroke = false;
-    this.drawing = false;
+    this.resizeCanvas();
+    this.applyStyle();
   }
 
-  clear() {
-    this.setupCanvas();
-  }
-
-  cancel() {
-    this.modalCtrl.dismiss({ ok: false });
-  }
-
-  async save(): Promise<void> {
-    if (!this.hasStroke) {
-      this.modalCtrl.dismiss({ ok: false, empty: true });
-      return;
-    }
-
-    const canvas = this.canvasRef.nativeElement;
-
-    const blob: Blob | null = await new Promise((resolve) =>
-      canvas.toBlob((b) => resolve(b), 'image/png', 1.0)
-    );
-
-    if (!blob) {
-      this.modalCtrl.dismiss({ ok: false, error: 'blob_failed' });
-      return;
-    }
-
-    this.modalCtrl.dismiss({
-      ok: true,
-      mime_type: 'image/png',
-      blob,
-    });
-  }
-
-  onPointerDown(ev: PointerEvent) {
-    ev.preventDefault();
-    const { x, y } = this.getCanvasPoint(ev);
-    this.drawing = true;
-    this.lastX = x;
-    this.lastY = y;
-  }
-
-  onPointerMove(ev: PointerEvent) {
-    if (!this.drawing) return;
-    ev.preventDefault();
-
-    const { x, y } = this.getCanvasPoint(ev);
-
-    this.ctx.beginPath();
-    this.ctx.moveTo(this.lastX, this.lastY);
-    this.ctx.lineTo(x, y);
-    this.ctx.stroke();
-
-    this.lastX = x;
-    this.lastY = y;
-    this.hasStroke = true;
-  }
-
-  onPointerUp(ev: PointerEvent) {
-    ev.preventDefault();
-    this.drawing = false;
-  }
-
-  onPointerLeave(ev: PointerEvent) {
-    ev.preventDefault();
-    this.drawing = false;
-  }
-
-  private getCanvasPoint(ev: PointerEvent) {
+  resizeCanvas(): void {
     const canvas = this.canvasRef.nativeElement;
     const rect = canvas.getBoundingClientRect();
-    return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+    canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+
+    // desenhar em coordenadas CSS (não em pixels reais)
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    this.redrawBackground();
+  }
+
+  clear(): void {
+    const canvas = this.canvasRef.nativeElement;
+    this.ctx.clearRect(0, 0, canvas.width, canvas.height);
+    this.redrawBackground();
+    this.empty = true;
+    this.last = null;
+  }
+
+  isEmpty(): boolean {
+    return this.empty;
+  }
+
+  toDataURL(type: string = 'image/png', quality?: number): string {
+    return this.canvasRef.nativeElement.toDataURL(type, quality);
+  }
+
+  onPointerDown(e: PointerEvent): void {
+    e.preventDefault();
+    this.applyStyle();
+
+    const canvas = this.canvasRef.nativeElement;
+    canvas.setPointerCapture(e.pointerId);
+
+    this.drawing = true;
+    this.last = this.pointFromEvent(e);
+
+    this.ctx.beginPath();
+    this.ctx.moveTo(this.last.x, this.last.y);
+  }
+
+  onPointerMove(e: PointerEvent): void {
+    if (!this.drawing || !this.last) return;
+    e.preventDefault();
+
+    const p = this.pointFromEvent(e);
+    this.ctx.lineTo(p.x, p.y);
+    this.ctx.stroke();
+
+    this.last = p;
+    this.empty = false;
+  }
+
+  onPointerUp(_e?: PointerEvent): void {
+    if (!this.drawing) return;
+    this.drawing = false;
+    this.last = null;
+    this.ctx.closePath();
+  }
+
+  private pointFromEvent(e: PointerEvent): { x: number; y: number } {
+    const canvas = this.canvasRef.nativeElement;
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  private applyStyle(): void {
+    this.ctx.lineCap = 'round';
+    this.ctx.lineJoin = 'round';
+    this.ctx.strokeStyle = this.options?.penColor || '#000';
+
+    // compat: se vier min/maxWidth, usamos maxWidth como espessura principal
+    const lw =
+      this.options?.lineWidth ??
+      this.options?.maxWidth ??
+      this.options?.minWidth ??
+      2;
+
+    this.ctx.lineWidth = lw;
+  }
+
+  private redrawBackground(): void {
+    const bg = this.options?.backgroundColor;
+    if (!bg || bg === 'transparent') return;
+
+    const canvas = this.canvasRef.nativeElement;
+    const rect = canvas.getBoundingClientRect();
+
+    this.ctx.save();
+    this.ctx.globalCompositeOperation = 'destination-over';
+    this.ctx.fillStyle = bg;
+    this.ctx.fillRect(0, 0, rect.width, rect.height);
+    this.ctx.restore();
   }
 }

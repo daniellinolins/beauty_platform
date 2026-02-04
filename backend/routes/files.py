@@ -43,6 +43,7 @@ def tenant_storage_paths(tenant_id: int, category: str):
 
 
 @bp_files.route("", methods=["POST"])
+@bp_files.route("/upload", methods=["POST"])
 def upload_file():
     """
     multipart/form-data:

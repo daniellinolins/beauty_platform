@@ -14,7 +14,21 @@ def create_app():
     app.config.from_object(Config)
 
     # CORS liberado para desenvolvimento
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    #CORS(app, resources={r"/api/*": {"origins": "*"}})
+    CORS(app, resources={r"/api/*": {"origins": [
+        "http://localhost",
+        "http://localhost:8100",
+        "ionic://localhost",
+        "capacitor://localhost",
+        "http://144.64.115.131",
+        "https://144.64.115.131",
+        "http://144.64.115.131:5000",
+        "https://144.64.115.131:5000"
+        "http://192.168.1.178",
+        "https://192.168.1.178",
+        "http://192.168.1.178:5000",
+        "https://192.168.1.178:5000"                
+    ]}}, supports_credentials=True)
 
     app.teardown_appcontext(close_conn)
 

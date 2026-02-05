@@ -12,25 +12,6 @@ $RECYCLE.BIN/
 *.log
 log.txt
 
-# Env files
-backend/.env
-.env
-
-# Runtime storage / uploads
-backend/storage/
-
-# macOS / exFAT metadata
-.DS_Store
-.AppleDouble
-._*
-
-ios/
-# Python
-backend/.venv/
-**/__pycache__/
-*.pyc
-*.pyo
-
 /backend/storage/
 /.sourcemaps
 /.versions
@@ -87,23 +68,3 @@ testem.log
 # System files
 .DS_Store
 Thumbs.db
-
-# Android / Gradle build outputs
-android/.gradle/
-android/build/
-android/app/build/
-android/app/.cxx/
-android/app/release/
-android/app/debug/
-
-# Android Studio
-android/.idea/
-android/*.iml
-android/local.properties
-
-# Keystore / signing (NUNCA versionar)
-*.jks
-*.keystore
-
-# Logs
-*.log

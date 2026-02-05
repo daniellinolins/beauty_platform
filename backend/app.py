@@ -15,6 +15,7 @@ def create_app():
 
     # CORS liberado para desenvolvimento
     #CORS(app, resources={r"/api/*": {"origins": "*"}})
+    """
     CORS(app, resources={r"/api/*": {"origins": [
         "http://localhost",
         "http://localhost:8100",
@@ -29,6 +30,15 @@ def create_app():
         "http://192.168.1.178:5000",
         "https://192.168.1.178:5000"                
     ]}}, supports_credentials=True)
+    """
+
+    CORS(app, resources={r"/api/*": {"origins": [
+        "http://localhost:8100",
+        "http://localhost",
+        "https://localhost",
+        "ionic://localhost",
+        "capacitor://localhost"
+    ]}})
 
     app.teardown_appcontext(close_conn)
 

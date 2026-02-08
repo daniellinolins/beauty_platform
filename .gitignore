@@ -1,70 +1,94 @@
-# Specifies intentionally untracked files to ignore when using Git
-# http://git-scm.com/docs/gitignore
+########################################
+# Python / Flask
+########################################
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
 
-*~
-*.sw[mnpcod]
-.tmp
-*.tmp
-*.tmp.*
-UserInterfaceState.xcuserstate
-$RECYCLE.BIN/
+# Virtual environments (seu caso: backend/.venv)
+.venv/
+venv/
+ENV/
+env/
+backend/.venv/
 
+# Logs / caches / builds
 *.log
-log.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
 
-/backend/storage/
-/.sourcemaps
-/.versions
-/coverage
+# Flask instance (se você usar)
+instance/
 
-# Ionic
-/.ionic
-/www
-/platforms
-/plugins
+# dotenv / secrets (ajuste conforme seus nomes reais)
+.env
+.env.*
+!.env.example
 
-# Compiled output
-/dist
-/tmp
-/out-tsc
-/bazel-out
+########################################
+# Node / Ionic
+########################################
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.yarn/
+.pnpm-store/
 
-# Node
-/node_modules
-npm-debug.log
-yarn-error.log
+# Ionic / Angular / Vite / React builds (dependendo do seu stack)
+www/
+dist/
+build/
+.cache/
+.vite/
 
-# IDEs and editors
+# Capacitor / Cordova
+# (normalmente você versiona: capacitor.config.* e os projetos ios/android; ignora outputs)
+capacitor.config.json
+capacitor.config.ts
+
+########################################
+# Android / Gradle
+########################################
+android/.gradle/
+android/build/
+android/app/build/
+android/captures/
+android/.idea/
+android/*.iml
+android/local.properties
+android/.externalNativeBuild/
+android/.cxx/
+*.apk
+*.aab
+
+########################################
+# iOS (se existir)
+########################################
+ios/DerivedData/
+ios/build/
+ios/Pods/
+ios/.symlinks/
+ios/.idea/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+########################################
+# IDE / OS
+########################################
+.vscode/
 .idea/
-.project
-.classpath
-.c9/
-*.launch
-.settings/
-*.sublime-project
-*.sublime-workspace
-
-# Visual Studio Code
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-.history/*
-
-
-# Miscellaneous
-/.angular
-/.angular/cache
-.sass-cache/
-/.nx
-/.nx/cache
-/connect.lock
-/coverage
-/libpeerconnection.log
-testem.log
-/typings
-
-# System files
+*.iml
 .DS_Store
 Thumbs.db
+
+.angular/
+backend/storage/

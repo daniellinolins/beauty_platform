@@ -8,6 +8,9 @@ from routes.submissions import bp_submissions
 
 from routes.files import bp_files
 
+from routes.forms_versions import bp_forms_versions
+
+
 
 def create_app():
     app = Flask(__name__)
@@ -40,6 +43,8 @@ def create_app():
         "capacitor://localhost"
     ]}})
 
+
+    app.register_blueprint(bp_forms_versions)
     app.teardown_appcontext(close_conn)
 
     app.register_blueprint(bp_forms)

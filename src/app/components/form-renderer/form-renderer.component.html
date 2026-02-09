@@ -1,0 +1,225 @@
+<div *ngIf="elements && elements.length > 0">
+  <ng-container *ngFor="let e of elements">
+
+    <h1 *ngIf="isTitle(e)" style="margin-top: 12px;">
+      {{ getTextLocalized(getStaticText(e)) }}
+    </h1>
+
+    <h2 *ngIf="isSubtitle(e)" style="margin-top: 12px;">
+      {{ getTextLocalized(getStaticText(e)) }}
+    </h2>
+
+    <p *ngIf="isTextBlock(e)" style="white-space: pre-wrap; margin-top: 10px;">
+      {{ getTextLocalized(getStaticText(e)) }}
+    </p>
+
+    <hr *ngIf="isDivider(e)" style="margin: 16px 0;" />
+
+    <!-- FIELD -->
+    <div *ngIf="isField(e)">
+
+      <!-- TEXT -->
+      <ion-item *ngIf="getInputType(e) === 'TEXT'">
+        <ion-label position="stacked">{{ getTextLocalized(getLabel(e)) }}</ion-label>
+        <ion-input
+          [disabled]="mode === 'preview'"
+          [readonly]="mode === 'preview'"
+          [value]="getPayloadValue(getKey(e)) ? getPayloadValue(getKey(e)) : ''"
+          (ionInput)="setPayloadValue(getKey(e), $event.detail.value)"
+        ></ion-input>
+      </ion-item>
+
+      <!-- TEXTAREA -->
+      <ion-item *ngIf="getInputType(e) === 'TEXTAREA'">
+        <ion-label position="stacked">{{ getTextLocalized(getLabel(e)) }}</ion-label>
+        <ion-textarea
+          autoGrow="true"
+          [disabled]="mode === 'preview'"
+          [readonly]="mode === 'preview'"
+          [value]="getPayloadValue(getKey(e)) ? getPayloadValue(getKey(e)) : ''"
+          (ionInput)="setPayloadValue(getKey(e), $event.detail.value)"
+        ></ion-textarea>
+      </ion-item>
+
+      <!-- NUMBER -->
+      <ion-item *ngIf="getInputType(e) === 'NUMBER'">
+        <ion-label position="stacked">{{ getTextLocalized(getLabel(e)) }}</ion-label>
+        <ion-input
+          type="number"
+          [disabled]="mode === 'preview'"
+          [readonly]="mode === 'preview'"
+          [value]="getPayloadValue(getKey(e)) ? getPayloadValue(getKey(e)) : ''"
+          (ionInput)="setPayloadValue(getKey(e), $event.detail.value)"
+        ></ion-input>
+      </ion-item>
+
+      <!-- DATE -->
+      <ion-item *ngIf="getInputType(e) === 'DATE'">
+        <ion-label position="stacked">{{ getTextLocalized(getLabel(e)) }}</ion-label>
+        <ion-input
+          type="date"
+          [disabled]="mode === 'preview'"
+          [readonly]="mode === 'preview'"
+          [value]="getPayloadValue(getKey(e)) ? getPayloadValue(getKey(e)) : ''"
+          (ionInput)="setPayloadValue(getKey(e), $event.detail.value)"
+        ></ion-input>
+      </ion-item>
+
+      <!-- BOOL -->
+      <ion-item *ngIf="getInputType(e) === 'BOOL'">
+        <ion-label style="white-space: normal;">
+          {{ getTextLocalized(getLabel(e)) }}
+        </ion-label>
+        <ion-toggle
+          slot="end"
+          [disabled]="mode === 'preview'"
+          [checked]="getPayloadValue(getKey(e)) ? true : false"
+          (ionChange)="setPayloadValue(getKey(e), $event.detail.checked)"
+        ></ion-toggle>
+      </ion-item>
+
+      <!-- SINGLE_CHOICE / SELECT -->
+      <ion-item *ngIf="getInputType(e) === 'SINGLE_CHOICE' || getInputType(e) === 'SELECT'">
+        <ion-label position="stacked">{{ getTextLocalized(getLabel(e)) }}</ion-label>
+
+        <ion-select
+          interface="popover"
+          [disabled]="mode === 'preview'"
+          [value]="getPayloadValue(getKey(e)) ? getPayloadValue(getKey(e)) : null"
+          (ionChange)="setPayloadValue(getKey(e), $event.detail.value)"
+        >
+          <ion-select-option *ngFor="let opt of getOptions(e)" [value]="opt.value">
+            {{ getTextLocalized(opt.label) ? getTextLocalized(opt.label) : opt.value }}
+          </ion-select-option>
+        </ion-select>
+      </ion-item>
+
+      <!-- MULTI_CHOICE -->
+      <ion-item *ngIf="getInputType(e) === 'MULTI_CHOICE'">
+        <ion-label position="stacked">{{ getTextLocalized(getLabel(e)) }}</ion-label>
+
+        <ion-select
+          multiple="true"
+          interface="popover"
+          [disabled]="mode === 'preview'"
+          [value]="getPayloadValue(getKey(e)) ? getPayloadValue(getKey(e)) : []"
+          (ionChange)="setPayloadValue(getKey(e), $event.detail.value)"
+        >
+          <ion-select-option *ngFor="let opt of getOptions(e)" [value]="opt.value">
+            {{ getTextLocalized(opt.label) ? getTextLocalized(opt.label) : opt.value }}
+          </ion-select-option>
+        </ion-select>
+      </ion-item>
+
+      <!-- PHOTO -->
+      <ion-item *ngIf="getInputType(e) === 'PHOTO'">
+        <ion-label style="white-space: normal;">
+          {{ getTextLocalized(getLabel(e)) }}
+        </ion-label>
+
+        <ion-button
+          slot="end"
+          fill="outline"
+          color="primary"
+          [disabled]="mode === 'preview'"
+          (click)="capturePhoto(getKey(e), getPhotoPurpose(e))"
+        >
+          Tirar foto
+        </ion-button>
+      </ion-item>
+
+      <div *ngIf="getInputType(e) === 'PHOTO'" style="margin: 8px 0 14px 0;">
+        <div *ngIf="getPhotoPreview(getKey(e))" style="margin-top: 8px;">
+          <img
+            [src]="getPhotoPreview(getKey(e))"
+            alt="Pré-visualização"
+            style="width: 100%; max-width: 220px; border-radius: 8px; border: 1px solid #ddd;"
+          />
+        </div>
+
+        <ion-text *ngIf="getPayloadValue(getKey(e)) && getPayloadValue(getKey(e)).id_file_object">
+          <p style="margin-top: 8px;">
+            Foto associada: {{ getPayloadValue(getKey(e)).id_file_object }}
+          </p>
+        </ion-text>
+
+        <ion-button
+          *ngIf="mode !== 'preview' && ( (getPayloadValue(getKey(e)) && getPayloadValue(getKey(e)).id_file_object) || getPhotoPreview(getKey(e)) )"
+          size="small"
+          color="medium"
+          fill="clear"
+          (click)="removePhoto(getKey(e))"
+          style="margin-top: 6px; padding-left: 0;"
+        >
+          Remover foto
+        </ion-button>
+      </div>
+
+      <!-- SIGNATURE -->
+      <ion-item *ngIf="getInputType(e) === 'SIGNATURE'">
+        <ion-label style="white-space: normal;">
+          {{ getTextLocalized(getLabel(e)) }}
+        </ion-label>
+
+        <ion-button
+          slot="end"
+          fill="outline"
+          color="primary"
+          [disabled]="mode === 'preview'"
+          (click)="openSignature(getKey(e))"
+        >
+          Assinar
+        </ion-button>
+      </ion-item>
+
+      <ion-text *ngIf="getInputType(e) === 'SIGNATURE' && getPayloadValue(getKey(e)) && getPayloadValue(getKey(e)).id_file_object">
+        <p style="margin-top: 8px;">
+          Arquivo associado: {{ getPayloadValue(getKey(e)).id_file_object }}
+        </p>
+      </ion-text>
+
+    </div>
+  </ng-container>
+</div>
+
+<!-- MODAL ASSINATURA -->
+<ion-modal #signatureModal>
+  <ng-template>
+    <ion-header>
+      <ion-toolbar>
+        <ion-title>Assinatura</ion-title>
+        <ion-buttons slot="end">
+          <ion-button (click)="signatureModal.dismiss()">Fechar</ion-button>
+        </ion-buttons>
+      </ion-toolbar>
+    </ion-header>
+
+    <ion-content class="ion-padding">
+      <div style="border: 1px solid #ddd; border-radius: 8px; overflow: hidden; height: 260px;">
+        <signature-pad
+          #sigPad
+          [options]="signaturePadOptions"
+          style="display:block; width:100%; height:100%;">
+        </signature-pad>
+      </div>
+
+      <ion-button
+        expand="block"
+        style="margin-top: 12px;"
+        [disabled]="mode === 'preview'"
+        (click)="clearSignature()"
+      >
+        Limpar
+      </ion-button>
+
+      <ion-button
+        expand="block"
+        style="margin-top: 8px;"
+        [disabled]="mode === 'preview'"
+        (click)="saveSignatureToPayload()"
+      >
+        Guardar assinatura
+      </ion-button>
+    </ion-content>
+  </ng-template>
+</ion-modal>

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import {
   IonBackButton,
@@ -7,58 +7,24 @@ import {
   IonButtons,
   IonContent,
   IonHeader,
-  IonInput,
-  IonItem,
-  IonLabel,
-  IonModal,
   IonSpinner,
   IonText,
   IonTitle,
-  IonToggle,
   IonToolbar,
-  IonTextarea,
-  IonSelect,
-  IonSelectOption,
 } from '@ionic/angular/standalone';
 import { firstValueFrom, Subject, takeUntil } from 'rxjs';
 import { ApiService } from 'src/app/services/api';
 
-import { SignaturePadComponent } from '../../components/signature-pad/signature-pad.component';
+import { FormRendererComponent } from '../../components/form-renderer/form-renderer.component';
+import { FormElement } from '../../components/form-renderer/form-renderer.types';
 
-// ✅ Capacitor Camera
-import { Camera, CameraResultType, CameraSource, Photo } from '@capacitor/camera';
-
-type LocalizedText = Record<string, string>;
-
-type FormField = {
-  key: string;
-  label?: LocalizedText;
-  input_type:
-    | 'TEXT'
-    | 'TEXTAREA'
-    | 'NUMBER'
-    | 'DATE'
-    | 'BOOL'
-    | 'SINGLE_CHOICE'
-    | 'PHOTO'
-    | 'SIGNATURE';
-  required?: boolean;
-  options?: Array<{ value: string; label?: LocalizedText }>;
-  multiple?: boolean;
-  photo_purpose?: string; // opcional no schema
-};
-
-type FormElement =
-  | { type: 'TITLE' | 'SUBTITLE' | 'TEXT_BLOCK'; text: LocalizedText }
-  | { type: 'DIVIDER' }
-  | { type: 'FIELD'; field: FormField };
 
 type FormSchema = {
   schema_version: string;
   default_language: string;
   sections: Array<{
     id: string;
-    title?: LocalizedText;
+    title?: Record<string, string>;
     elements: FormElement[];
   }>;
 };
@@ -77,16 +43,8 @@ type FormSchema = {
     IonContent,
     IonText,
     IonSpinner,
-    IonItem,
-    IonLabel,
-    IonInput,
-    IonTextarea,
-    IonToggle,
-    IonSelect,
-    IonSelectOption,
     IonButton,
-    IonModal,
-    SignaturePadComponent,
+    FormRendererComponent,
   ],
 })
 export class FormFillPage implements OnInit, OnDestroy {
@@ -112,23 +70,6 @@ export class FormFillPage implements OnInit, OnDestroy {
   payload: Record<string, any> = {};
   submissionId: number | null = null;
 
-  // --- Preview local de fotos (não persiste; só UX)
-  photoPreviewUrls: Record<string, string> = {};
-
-  // --- Assinatura ---
-  @ViewChild('signatureModal', { static: false }) signatureModal?: IonModal;
-  @ViewChild('sigPad') sigPad?: SignaturePadComponent;
-
-  signatureFieldKey: string | null = null;
-
-  signaturePadOptions: any = {
-    penColor: '#000',
-    lineWidth: 2,
-    backgroundColor: '#fff',
-    minWidth: 1,
-    maxWidth: 2.5,
-  };
-
   constructor(private route: ActivatedRoute, private api: ApiService) {}
 
   ngOnInit() {
@@ -143,13 +84,6 @@ export class FormFillPage implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.destroy$.next();
     this.destroy$.complete();
-
-    // revoga previews para não vazar memória
-    for (const k of Object.keys(this.photoPreviewUrls)) {
-      try {
-        URL.revokeObjectURL(this.photoPreviewUrls[k]);
-      } catch {}
-    }
   }
 
   async loadForm() {
@@ -191,214 +125,11 @@ export class FormFillPage implements OnInit, OnDestroy {
     }
   }
 
-  getTextLocalized(txt?: LocalizedText): string {
-    if (!txt) return '';
-    return (
-      txt[this.defaultLang] ||
-      txt['pt-PT'] ||
-      txt['pt-BR'] ||
-      txt['en-US'] ||
-      Object.values(txt)[0] ||
-      ''
-    );
+  onRendererError(msg: string) {
+    // msg vazio = limpar
+    this.errorMsg = msg || '';
   }
 
-  getPayloadValue(key?: string): any {
-    if (!key) return null;
-    return this.payload[key];
-  }
-
-  setPayloadValue(key?: string, value?: any) {
-    if (!key) return;
-    this.payload[key] = value;
-  }
-
-  // -------------------------
-  // PHOTO
-  // -------------------------
-  async capturePhoto(fieldKey: string, purpose?: string) {
-    this.errorMsg = '';
-
-    try {
-      const photo: Photo = await Camera.getPhoto({
-        quality: 85,
-        resultType: CameraResultType.Uri,
-        source: CameraSource.Camera,
-        allowEditing: false,
-        saveToGallery: false,
-      });
-
-      // webPath funciona bem no ionic serve e também no app (Capacitor)
-      const webPath = photo.webPath;
-      if (!webPath) {
-        this.errorMsg = 'Não foi possível obter o caminho da foto.';
-        return;
-      }
-
-      const blob = await this.fetchAsBlob(webPath);
-      const ext = this.guessExtension(photo.format);
-      const filename = `photo_${Date.now()}.${ext}`;
-      const file = new File([blob], filename, { type: blob.type || `image/${ext}` });
-
-      // preview local
-      this.setPhotoPreview(fieldKey, URL.createObjectURL(file));
-
-      // upload igual assinatura
-      const uploaded = await firstValueFrom(
-        this.api
-          .uploadFile(this.tenantId, file, file.name, 'photos', purpose || 'PHOTO')
-          .pipe(takeUntil(this.destroy$)),
-      );
-
-      const fileObjectId = uploaded?.id_file_object;
-      if (!fileObjectId) {
-        this.errorMsg = 'Upload da foto falhou (id_file_object vazio).';
-        console.error('Upload response:', uploaded);
-        return;
-      }
-
-      this.setPayloadValue(fieldKey, {
-        id_file_object: fileObjectId,
-        kind: 'PHOTO',
-      });
-    } catch (e: any) {
-      // se o user cancelar o camera picker, o capacitor lança erro
-      if (String(e?.message || '').toLowerCase().includes('cancel')) return;
-      this.errorMsg = 'Erro ao capturar/enviar a foto.';
-      console.error(e);
-    }
-  }
-
-  removePhoto(fieldKey: string) {
-    // limpa payload
-    delete this.payload[fieldKey];
-
-    // limpa preview local
-    const prev = this.photoPreviewUrls[fieldKey];
-    if (prev) {
-      try {
-        URL.revokeObjectURL(prev);
-      } catch {}
-      delete this.photoPreviewUrls[fieldKey];
-    }
-  }
-
-  getPhotoPreview(fieldKey: string): string | null {
-    return this.photoPreviewUrls[fieldKey] || null;
-  }
-
-  private setPhotoPreview(fieldKey: string, url: string) {
-    const old = this.photoPreviewUrls[fieldKey];
-    if (old) {
-      try {
-        URL.revokeObjectURL(old);
-      } catch {}
-    }
-    this.photoPreviewUrls[fieldKey] = url;
-  }
-
-  private async fetchAsBlob(url: string): Promise<Blob> {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`fetch() failed: ${res.status}`);
-    return await res.blob();
-  }
-
-  private guessExtension(format?: string | null): string {
-    const f = String(format || '').toLowerCase();
-    if (f === 'jpeg' || f === 'jpg') return 'jpg';
-    if (f === 'png') return 'png';
-    if (f === 'heic' || f === 'heif') return 'heic';
-    return 'jpg';
-  }
-
-  // -------------------------
-  // SIGNATURE
-  // -------------------------
-  onSignatureModalDidPresent() {
-    this.sigPad?.resizeCanvas();
-  }
-
-  async openSignature(fieldKey: string) {
-    this.errorMsg = '';
-    this.signatureFieldKey = fieldKey;
-
-    await this.signatureModal?.present();
-
-    setTimeout(() => {
-      try {
-        this.sigPad?.resizeCanvas();
-        this.sigPad?.clear();
-      } catch (e) {
-        console.error('SignaturePad resize/clear failed', e);
-      }
-    }, 80);
-  }
-
-  clearSignature() {
-    try {
-      this.sigPad?.clear();
-    } catch {}
-  }
-
-  async saveSignatureToPayload() {
-    if (!this.signatureFieldKey) return;
-
-    const isEmpty = this.sigPad?.isEmpty?.() === true;
-    if (isEmpty) {
-      this.errorMsg = 'Assine antes de guardar.';
-      return;
-    }
-
-    const dataUrl: string | undefined = this.sigPad?.toDataURL?.('image/png');
-    if (!dataUrl) {
-      this.errorMsg = 'Não foi possível capturar a assinatura.';
-      return;
-    }
-
-    const file = this.dataUrlToFile(dataUrl, `signature_${Date.now()}.png`);
-
-    try {
-      const uploaded = await firstValueFrom(
-        this.api
-          .uploadFile(this.tenantId, file, file.name, 'signatures', 'SIGNATURE')
-          .pipe(takeUntil(this.destroy$)),
-      );
-
-      const fileObjectId = uploaded?.id_file_object;
-      if (!fileObjectId) {
-        this.errorMsg = 'Upload da assinatura falhou (id_file_object vazio).';
-        console.error('Upload response:', uploaded);
-        return;
-      }
-
-      this.setPayloadValue(this.signatureFieldKey, {
-        id_file_object: fileObjectId,
-        kind: 'SIGNATURE',
-      });
-
-      await this.signatureModal?.dismiss();
-      this.signatureFieldKey = null;
-      this.errorMsg = '';
-    } catch (e) {
-      this.errorMsg = 'Erro ao enviar assinatura.';
-      console.error(e);
-    }
-  }
-
-  private dataUrlToFile(dataUrl: string, filename: string): File {
-    const arr = dataUrl.split(',');
-    const mimeMatch = arr[0].match(/:(.*?);/);
-    const mime = mimeMatch ? mimeMatch[1] : 'image/png';
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) u8arr[n] = bstr.charCodeAt(n);
-    return new File([u8arr], filename, { type: mime });
-  }
-
-  // -------------------------
-  // SAVE SUBMISSION
-  // -------------------------
   async save() {
     this.errorMsg = '';
 

@@ -1,0 +1,111 @@
+{
+   "schema_version": "v1",
+   "default_language": "pt-PT",
+   "sections": [
+     {
+       "id": "sec_header",
+       "title": { "pt-PT": "Ficha de Consentimento", "en-US": "Consent Form" },
+       "elements": [
+         {
+           "type": "TITLE",
+           "text": { "pt-PT": "CONSENTIMENTO INFORMADO", "en-US": "INFORMED CONSENT" }
+         },
+         {
+           "type": "TEXT_BLOCK",
+           "text": {
+             "pt-PT": "Ao assinar este documento, declaro que fui informado(a) sobre o procedimento, possíveis riscos, cuidados e alternativas, e autorizo a realização do tratamento conforme explicado pela clínica.",
+             "en-US": "By signing this document, I declare I was informed about the procedure, potential risks, aftercare, and alternatives, and I authorize the treatment as explained by the clinic."
+           }
+         },
+         { "type": "DIVIDER" }
+       ]
+     },
+     {
+       "id": "sec_client",
+       "title": { "pt-PT": "Dados do Cliente", "en-US": "Client Data" },
+       "elements": [
+         {
+           "type": "FIELD",
+           "field": {
+             "key": "client.full_name",
+             "label": { "pt-PT": "Nome completo", "en-US": "Full name" },
+             "input_type": "TEXT",
+             "required": true,
+             "validations": { "min_len": 3, "max_len": 120 }
+           }
+         },
+         {
+           "type": "FIELD",
+           "field": {
+             "key": "client.email",
+             "label": { "pt-PT": "E-mail", "en-US": "Email" },
+             "input_type": "TEXT",
+             "required": false,
+             "validations": { "regex": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$" }
+           }
+         },
+         {
+           "type": "FIELD",
+           "field": {
+             "key": "client.birth_date",
+             "label": { "pt-PT": "Data de nascimento", "en-US": "Birth date" },
+             "input_type": "DATE",
+             "required": false
+           }
+         },
+         { "type": "DIVIDER" }
+       ]
+     },
+     {
+       "id": "sec_docs_photos",
+       "title": { "pt-PT": "Documentos e Fotos", "en-US": "Documents and Photos" },
+       "elements": [
+         {
+           "type": "FIELD",
+           "field": {
+             "key": "docs.id_photo",
+             "label": { "pt-PT": "Foto do documento de identificação", "en-US": "Photo of ID document" },
+             "input_type": "PHOTO",
+             "required": true,
+             "multiple": false,
+             "photo_purpose": "ID_DOCUMENT"
+           }
+         },
+         {
+           "type": "FIELD",
+           "field": {
+             "key": "treatment.area_photos",
+             "label": { "pt-PT": "Fotos da área do tratamento (antes)", "en-US": "Treatment area photos (before)" },
+             "input_type": "PHOTO",
+             "required": false,
+             "multiple": true,
+             "photo_purpose": "TREATMENT_AREA_BEFORE"
+           }
+         },
+         { "type": "DIVIDER" }
+       ]
+     },
+     {
+       "id": "sec_signature",
+       "title": { "pt-PT": "Assinatura", "en-US": "Signature" },
+       "elements": [
+         {
+           "type": "FIELD",
+           "field": {
+             "key": "consent.signature",
+             "label": { "pt-PT": "Assinatura do cliente", "en-US": "Client signature" },
+             "input_type": "SIGNATURE",
+             "required": true
+           }
+         },
+         {
+           "type": "TEXT_BLOCK",
+           "text": {
+             "pt-PT": "Ao assinar, confirmo que li e concordo com os termos acima.",
+             "en-US": "By signing, I confirm that I have read and agree to the terms above."
+           }
+         }
+       ]
+     }
+   ]
+ }

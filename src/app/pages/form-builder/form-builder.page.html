@@ -1,0 +1,161 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/forms"></ion-back-button>
+    </ion-buttons>
+
+    <ion-title>Form Builder</ion-title>
+
+    <ion-buttons slot="end">
+      <ion-button (click)="preview()" [disabled]="loading">Preview</ion-button>
+      <ion-button (click)="saveDraft()" [disabled]="loading || isNew || versionStatus !== 'DRAFT'">Salvar</ion-button>
+      <ion-button (click)="publish()" color="success" [disabled]="loading || isNew || versionStatus !== 'DRAFT'">
+        Publicar
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <ion-text color="danger" *ngIf="errorMsg">
+    <p>{{ errorMsg }}</p>
+  </ion-text>
+
+  <ion-text color="primary" *ngIf="infoMsg">
+    <p>{{ infoMsg }}</p>
+  </ion-text>
+
+  <ion-spinner *ngIf="loading"></ion-spinner>
+
+  <ion-segment *ngIf="!loading" [value]="tab" (ionChange)="setTab($event.detail.value)">
+    <ion-segment-button value="meta"><ion-label>Metadados</ion-label></ion-segment-button>
+    <ion-segment-button value="structure" [disabled]="isNew"><ion-label>Estrutura</ion-label></ion-segment-button>
+    <ion-segment-button value="versions" [disabled]="isNew"><ion-label>Versões</ion-label></ion-segment-button>
+  </ion-segment>
+
+  <!-- META -->
+  <div *ngIf="tab === 'meta' && !loading">
+    <ion-list>
+      <ion-item>
+        <ion-label position="stacked">Nome</ion-label>
+        <ion-input [value]="formName" (ionInput)="setFormName($event.detail.value)"></ion-input>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Descrição</ion-label>
+        <ion-textarea autoGrow="true" [value]="formDescription" (ionInput)="setFormDescription($event.detail.value)"></ion-textarea>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Status</ion-label>
+        <ion-select [value]="formStatus" (ionChange)="setFormStatus($event.detail.value)">
+          <ion-select-option value="ACTIVE">ACTIVE</ion-select-option>
+          <ion-select-option value="INACTIVE">INACTIVE</ion-select-option>
+        </ion-select>
+      </ion-item>
+
+      <ion-item>
+        <ion-label position="stacked">Idioma padrão</ion-label>
+        <ion-select [value]="defaultLanguage" (ionChange)="setDefaultLanguage($event.detail.value)">
+          <ion-select-option value="pt-PT">pt-PT</ion-select-option>
+          <ion-select-option value="pt-BR">pt-BR</ion-select-option>
+          <ion-select-option value="en-US">en-US</ion-select-option>
+          <ion-select-option value="es-ES">es-ES</ion-select-option>
+        </ion-select>
+      </ion-item>
+    </ion-list>
+
+    <ion-button expand="block" *ngIf="isNew" (click)="createNewFormAndDraft()">
+      Criar formulário (e versão DRAFT)
+    </ion-button>
+
+    <div *ngIf="!isNew" style="margin-top: 10px; opacity:.85;">
+      <p><strong>Versão atual:</strong> {{ versionNumber }} ({{ versionStatus }})</p>
+    </div>
+  </div>
+
+  <!-- STRUCTURE -->
+  <div *ngIf="tab === 'structure' && !loading">
+    <div style="margin-top: 10px;">
+      <p><strong>Versão:</strong> {{ versionNumber }} ({{ versionStatus }})</p>
+    </div>
+
+    <h3 style="margin-top: 16px;">Seções</h3>
+
+    <ion-reorder-group [disabled]="versionStatus !== 'DRAFT'" (ionItemReorder)="reorderSections($event)">
+      <ion-item *ngFor="let s of sections; let i = index" (click)="selectSection(i)">
+        <ion-label>
+          <div><strong>{{ s.title?.[defaultLanguage] || ('Seção ' + (i+1)) }}</strong></div>
+          <div style="font-size: 12px; opacity: .75;">{{ s.id }}</div>
+        </ion-label>
+
+        <ion-buttons slot="end" *ngIf="versionStatus === 'DRAFT'">
+          <ion-button fill="clear" (click)="renameSection(i); $event.stopPropagation();">Renomear</ion-button>
+          <ion-button fill="clear" color="danger" [disabled]="sections.length <= 1" (click)="removeSection(i); $event.stopPropagation();">
+            Remover
+          </ion-button>
+        </ion-buttons>
+
+        <ion-reorder slot="end"></ion-reorder>
+      </ion-item>
+    </ion-reorder-group>
+
+    <ion-button expand="block" fill="outline" [disabled]="versionStatus !== 'DRAFT'" (click)="addSection()" style="margin-top: 10px;">
+      Adicionar seção
+    </ion-button>
+
+    <hr style="margin: 18px 0;" />
+
+    <h3>Elementos (Seção {{ selectedSectionIndex + 1 }})</h3>
+
+    <ion-reorder-group [disabled]="versionStatus !== 'DRAFT'" (ionItemReorder)="reorderElements($event)">
+      <ion-item *ngFor="let el of currentElements; let i = index">
+        <ion-label (click)="editElement(i)" style="cursor:pointer;">
+          <div><strong>{{ el.type }}</strong></div>
+
+          <div style="font-size: 12px; opacity: .75;" *ngIf="isField(el)">
+            key: {{ fieldKey(el) }} | input_type: {{ fieldInputType(el) }}
+          </div>
+
+          <div style="font-size: 12px; opacity: .75;" *ngIf="!isField(el)">
+            {{ staticText(el) }}
+          </div>
+        </ion-label>
+
+        <ion-buttons slot="end" *ngIf="versionStatus === 'DRAFT'">
+          <ion-button fill="clear" color="danger" (click)="removeElement(i)">Remover</ion-button>
+        </ion-buttons>
+
+        <ion-reorder slot="end"></ion-reorder>
+      </ion-item>
+    </ion-reorder-group>
+
+    <ion-button expand="block" fill="outline" [disabled]="versionStatus !== 'DRAFT'" (click)="addElement()" style="margin-top: 10px;">
+      Adicionar elemento
+    </ion-button>
+  </div>
+
+  <!-- VERSIONS -->
+  <div *ngIf="tab === 'versions' && !loading">
+    <div style="margin-top: 10px;">
+      <ion-button expand="block" fill="outline" (click)="createNewDraftFromCurrent()">
+        Criar nova versão DRAFT (clonar atual)
+      </ion-button>
+    </div>
+
+    <h3 style="margin-top: 16px;">Versões</h3>
+
+    <ion-list>
+      <ion-item *ngFor="let v of versions" (click)="loadVersionFromList(v)">
+        <ion-label>
+          <div><strong>v{{ v.version_number }}</strong> — {{ v.status }}</div>
+          <div style="font-size:12px;opacity:.75;">id_form_version: {{ v.id_form_version }}</div>
+        </ion-label>
+      </ion-item>
+    </ion-list>
+
+    <p style="opacity:.75; margin-top: 8px;">
+      Dica: clique numa versão para carregar. Somente DRAFT pode ser editada.
+    </p>
+  </div>
+</ion-content>

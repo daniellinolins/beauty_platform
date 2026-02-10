@@ -1,31 +1,29 @@
 <ion-header>
   <ion-toolbar>
-    <ion-buttons slot="start">
-      <ion-back-button defaultHref="/forms"></ion-back-button>
+    <ion-title>{{ formName || 'Formulário' }}</ion-title>
+    <ion-buttons slot="end">
+      <ion-button routerLink="/forms">Voltar</ion-button>
     </ion-buttons>
-    <ion-title>Preencher</ion-title>
   </ion-toolbar>
 </ion-header>
 
 <ion-content class="ion-padding">
-  <ion-text color="danger" *ngIf="errorMsg">
-    <p>{{ errorMsg }}</p>
-  </ion-text>
+  <ion-spinner *ngIf="loading" name="crescent"></ion-spinner>
 
-  <ion-spinner *ngIf="loading"></ion-spinner>
-
-  <div *ngIf="!loading && elements.length > 0">
+  <div *ngIf="!loading">
     <app-form-renderer
-      [mode]="'edit'"
+      [mode]="'fill'"
       [tenantId]="tenantId"
       [defaultLang]="defaultLang"
       [elements]="elements"
       [payload]="payload"
+      (payloadChange)="payload = $event"
       (error)="onRendererError($event)"
     ></app-form-renderer>
 
-    <ion-button expand="block" style="margin-top: 18px;" (click)="save()">
-      Guardar
+    <!-- Se sua main já tem botões próprios, pode remover este bloco -->
+    <ion-button expand="block" style="margin-top: 16px;" (click)="save()">
+      Salvar
     </ion-button>
   </div>
 </ion-content>

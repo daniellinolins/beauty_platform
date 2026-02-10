@@ -2,21 +2,24 @@ import {
   AfterViewInit,
   Component,
   ElementRef,
+  EventEmitter,
   Input,
+  Output,
   ViewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 export type SignaturePadOptions = {
-  penColor?: string;          // default '#000'
-  lineWidth?: number;         // default 2
-  backgroundColor?: string;   // default 'transparent' | '#fff'
-  minWidth?: number;          // compat (se vier do código antigo)
-  maxWidth?: number;          // compat (se vier do código antigo)
+  penColor?: string;
+  lineWidth?: number;
+  backgroundColor?: string;
+  minWidth?: number;
+  maxWidth?: number;
 };
 
 @Component({
-  selector: 'signature-pad',
+  // ✅ compat: alguns templates referenciam <app-signature-pad>
+  selector: 'signature-pad, app-signature-pad',
   standalone: true,
   imports: [CommonModule],
   templateUrl: './signature-pad.component.html',
@@ -30,6 +33,15 @@ export class SignaturePadComponent implements AfterViewInit {
     lineWidth: 2,
     backgroundColor: 'transparent',
   };
+
+  // ✅ compat p/ renderer
+  @Input() disabled: boolean = false;
+  @Input() tenantId: number = 1;
+  @Input() value: any = null;
+
+  // Se quiser desligar emissão automática ao levantar o dedo, set false no template
+  @Input() emitOnEnd: boolean = true;
+  @Output() valueChange = new EventEmitter<any>();
 
   private ctx!: CanvasRenderingContext2D;
   private drawing = false;
@@ -54,18 +66,21 @@ export class SignaturePadComponent implements AfterViewInit {
     canvas.width = Math.max(1, Math.floor(rect.width * dpr));
     canvas.height = Math.max(1, Math.floor(rect.height * dpr));
 
-    // desenhar em coordenadas CSS (não em pixels reais)
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
     this.redrawBackground();
   }
 
   clear(): void {
+    if (this.disabled) return;
+
     const canvas = this.canvasRef.nativeElement;
     this.ctx.clearRect(0, 0, canvas.width, canvas.height);
     this.redrawBackground();
     this.empty = true;
     this.last = null;
+
+    this.value = null;
+    this.valueChange.emit(null);
   }
 
   isEmpty(): boolean {
@@ -77,6 +92,8 @@ export class SignaturePadComponent implements AfterViewInit {
   }
 
   onPointerDown(e: PointerEvent): void {
+    if (this.disabled) return;
+
     e.preventDefault();
     this.applyStyle();
 
@@ -91,7 +108,9 @@ export class SignaturePadComponent implements AfterViewInit {
   }
 
   onPointerMove(e: PointerEvent): void {
+    if (this.disabled) return;
     if (!this.drawing || !this.last) return;
+
     e.preventDefault();
 
     const p = this.pointFromEvent(e);
@@ -103,10 +122,20 @@ export class SignaturePadComponent implements AfterViewInit {
   }
 
   onPointerUp(_e?: PointerEvent): void {
+    if (this.disabled) return;
     if (!this.drawing) return;
+
     this.drawing = false;
     this.last = null;
     this.ctx.closePath();
+
+    if (this.emitOnEnd) {
+      try {
+        const dataUrl = this.toDataURL('image/png');
+        this.value = dataUrl;
+        this.valueChange.emit(dataUrl);
+      } catch {}
+    }
   }
 
   private pointFromEvent(e: PointerEvent): { x: number; y: number } {
@@ -120,7 +149,6 @@ export class SignaturePadComponent implements AfterViewInit {
     this.ctx.lineJoin = 'round';
     this.ctx.strokeStyle = this.options?.penColor || '#000';
 
-    // compat: se vier min/maxWidth, usamos maxWidth como espessura principal
     const lw =
       this.options?.lineWidth ??
       this.options?.maxWidth ??
@@ -135,12 +163,12 @@ export class SignaturePadComponent implements AfterViewInit {
     if (!bg || bg === 'transparent') return;
 
     const canvas = this.canvasRef.nativeElement;
-    const rect = canvas.getBoundingClientRect();
+    const ctx = this.ctx;
 
-    this.ctx.save();
-    this.ctx.globalCompositeOperation = 'destination-over';
-    this.ctx.fillStyle = bg;
-    this.ctx.fillRect(0, 0, rect.width, rect.height);
-    this.ctx.restore();
+    const rect = canvas.getBoundingClientRect();
+    ctx.save();
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, rect.width, rect.height);
+    ctx.restore();
   }
 }

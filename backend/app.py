@@ -1,64 +1,29 @@
-from flask import Flask, jsonify
+import os
+from flask import Flask
 from flask_cors import CORS
-from config import Config
-from db import close_conn
 
 from routes.forms import bp_forms
-from routes.submissions import bp_submissions
-
-from routes.files import bp_files
-
-from routes.forms_versions import bp_forms_versions
+from routes.forms_versions import bp_form_versions
 
 
-
-def create_app():
+def create_app() -> Flask:
     app = Flask(__name__)
-    app.config.from_object(Config)
+    CORS(app)
 
-    # CORS liberado para desenvolvimento
-    #CORS(app, resources={r"/api/*": {"origins": "*"}})
-    """
-    CORS(app, resources={r"/api/*": {"origins": [
-        "http://localhost",
-        "http://localhost:8100",
-        "ionic://localhost",
-        "capacitor://localhost",
-        "http://144.64.115.131",
-        "https://144.64.115.131",
-        "http://144.64.115.131:5000",
-        "https://144.64.115.131:5000"
-        "http://192.168.1.178",
-        "https://192.168.1.178",
-        "http://192.168.1.178:5000",
-        "https://192.168.1.178:5000"                
-    ]}}, supports_credentials=True)
-    """
+    # Make DB_* available in current_app.config for db.py (it also falls back to env vars).
+    app.config.setdefault('DB_HOST', os.getenv('DB_HOST', 'localhost'))
+    app.config.setdefault('DB_PORT', int(os.getenv('DB_PORT', '3306')))
+    app.config.setdefault('DB_USER', os.getenv('DB_USER', 'root'))
+    app.config.setdefault('DB_PASSWORD', os.getenv('DB_PASSWORD', ''))
+    app.config.setdefault('DB_NAME', os.getenv('DB_NAME', 'beauty_platform'))
 
-    CORS(app, resources={r"/api/*": {"origins": [
-        "http://localhost:8100",
-        "http://localhost",
-        "https://localhost",
-        "ionic://localhost",
-        "capacitor://localhost"
-    ]}})
-
-
-    app.register_blueprint(bp_forms_versions)
-    app.teardown_appcontext(close_conn)
-
+    # API routes
     app.register_blueprint(bp_forms)
-    app.register_blueprint(bp_submissions)
-    app.register_blueprint(bp_files)
-
-
-    @app.get("/api/health")
-    def health():
-        return jsonify({"status": "ok"})
+    app.register_blueprint(bp_form_versions)
 
     return app
 
-app = create_app()
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+if __name__ == '__main__':
+    app = create_app()
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', '5000')), debug=True)

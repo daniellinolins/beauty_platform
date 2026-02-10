@@ -1,12 +1,5 @@
 import { CommonModule } from '@angular/common';
-import {
-  Component,
-  EventEmitter,
-  Input,
-  OnDestroy,
-  Output,
-  ViewChild,
-} from '@angular/core';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 import {
   IonButton,
   IonItem,
@@ -16,30 +9,30 @@ import {
   IonToggle,
   IonSelect,
   IonSelectOption,
+  IonRadioGroup,
+  IonRadio,
+  IonCheckbox,
+  IonList,
+  IonDatetime,
+  IonDatetimeButton,
   IonModal,
-  IonText,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
-  IonContent,
 } from '@ionic/angular/standalone';
-import { firstValueFrom, Subject, takeUntil } from 'rxjs';
-import { ApiService } from 'src/app/services/api';
 
+import { PhotoCaptureComponent } from '../photo-capture/photo-capture.component';
 import { SignaturePadComponent } from '../signature-pad/signature-pad.component';
 
-// ✅ Capacitor Camera
-import { Camera, CameraResultType, CameraSource, Photo } from '@capacitor/camera';
-
-import { FormElement, LocalizedText, FieldOption } from './form-renderer.types';
+import {
+  FieldOption,
+  FormElement,
+  LocalizedText,
+} from './form-renderer.types';
 
 @Component({
   selector: 'app-form-renderer',
   standalone: true,
-  templateUrl: './form-renderer.component.html',
   imports: [
     CommonModule,
+    IonButton,
     IonItem,
     IonLabel,
     IonInput,
@@ -47,54 +40,31 @@ import { FormElement, LocalizedText, FieldOption } from './form-renderer.types';
     IonToggle,
     IonSelect,
     IonSelectOption,
-    IonButton,
+    IonRadioGroup,
+    IonRadio,
+    IonCheckbox,
+    IonList,
+    IonDatetime,
+    IonDatetimeButton,
     IonModal,
-    IonText,
-    IonHeader,
-    IonToolbar,
-    IonTitle,
-    IonButtons,
-    IonContent,
+    PhotoCaptureComponent,
     SignaturePadComponent,
   ],
+  templateUrl: './form-renderer.component.html',
 })
-export class FormRendererComponent implements OnDestroy {
-  private destroy$ = new Subject<void>();
+export class FormRendererComponent {
+  @Input() mode: 'fill' | 'preview' | 'edit' = 'fill';
 
-  @Input() mode: 'edit' | 'preview' = 'edit';
   @Input() tenantId: number = 1;
   @Input() defaultLang: string = 'pt-PT';
+
   @Input() elements: FormElement[] = [];
   @Input() payload: Record<string, any> = {};
 
-  @Output() error = new EventEmitter<string>();
+  @Output() payloadChange = new EventEmitter<Record<string, any>>();
 
-  private photoPreviewUrls: Record<string, string> = {};
-
-  @ViewChild('signatureModal', { static: false }) signatureModal?: IonModal;
-  @ViewChild('sigPad') sigPad?: SignaturePadComponent;
-
-  signatureFieldKey: string | null = null;
-
-  signaturePadOptions: any = {
-    penColor: '#000',
-    lineWidth: 2,
-    backgroundColor: '#fff',
-    minWidth: 1,
-    maxWidth: 2.5,
-  };
-
-  constructor(private api: ApiService) {}
-
-  ngOnDestroy() {
-    this.destroy$.next();
-    this.destroy$.complete();
-
-    for (const k of Object.keys(this.photoPreviewUrls)) {
-      try {
-        URL.revokeObjectURL(this.photoPreviewUrls[k]);
-      } catch {}
-    }
+  canEdit(): boolean {
+    return this.mode !== 'preview';
   }
 
   // -------------------------
@@ -109,6 +79,9 @@ export class FormRendererComponent implements OnDestroy {
   isTextBlock(e: FormElement): boolean {
     return e.type === 'TEXT_BLOCK';
   }
+  isImage(e: FormElement): boolean {
+    return e.type === 'IMAGE_DECORATIVE';
+  }
   isDivider(e: FormElement): boolean {
     return e.type === 'DIVIDER';
   }
@@ -121,6 +94,16 @@ export class FormRendererComponent implements OnDestroy {
       return (e as any).text || null;
     }
     return null;
+  }
+
+  getImageUrl(e: FormElement): string {
+    if (e.type !== 'IMAGE_DECORATIVE') return '';
+    return String((e as any).url || '');
+  }
+
+  getImageAlt(e: FormElement): LocalizedText | null {
+    if (e.type !== 'IMAGE_DECORATIVE') return null;
+    return (e as any).alt || null;
   }
 
   getKey(e: FormElement): string {
@@ -148,220 +131,48 @@ export class FormRendererComponent implements OnDestroy {
     return (e as any).options || [];
   }
 
-  getPhotoPurpose(e: FormElement): string {
-    if (e.type !== 'FIELD') return '';
-    return (e as any).photo_purpose || '';
+  isRequired(e: FormElement): boolean {
+    if (e.type !== 'FIELD') return false;
+    return !!((e as any).rules && (e as any).rules.required);
+  }
+
+  getTextLocalized(t: LocalizedText | null | undefined): string {
+    if (!t) return '';
+    return t[this.defaultLang] || t['pt-PT'] || t['pt-BR'] || Object.values(t)[0] || '';
   }
 
   // -------------------------
-  // Utils / Localization
+  // Payload handling
   // -------------------------
-  getTextLocalized(txt?: LocalizedText | null): string {
-    if (!txt) return '';
-    return (
-      txt[this.defaultLang] ||
-      txt['pt-PT'] ||
-      txt['pt-BR'] ||
-      txt['en-US'] ||
-      (Object.values(txt).length > 0 ? Object.values(txt)[0] : '') ||
-      ''
-    );
-  }
-
-  canEdit(): boolean {
-    return this.mode === 'edit';
-  }
-
-  getPayloadValue(key?: string): any {
+  getPayloadValue(key: string): any {
     if (!key) return null;
-    return this.payload[key];
+    return this.payload ? this.payload[key] : null;
   }
 
-  setPayloadValue(key?: string, value?: any) {
+  setPayloadValue(key: string, value: any) {
     if (!key) return;
-    this.payload[key] = value;
+    this.payload = { ...(this.payload || {}), [key]: value };
+    this.payloadChange.emit(this.payload);
   }
 
-  // -------------------------
-  // PHOTO
-  // -------------------------
-  getPhotoPreview(fieldKey: string): string | null {
-    return this.photoPreviewUrls[fieldKey] || null;
+  // Choices helpers
+  isCheckedMulti(key: string, optionValue: string): boolean {
+    const cur = this.getPayloadValue(key);
+    if (!Array.isArray(cur)) return false;
+    return cur.includes(optionValue);
   }
 
-  private setPhotoPreview(fieldKey: string, url: string) {
-    const old = this.photoPreviewUrls[fieldKey];
-    if (old) {
-      try {
-        URL.revokeObjectURL(old);
-      } catch {}
-    }
-    this.photoPreviewUrls[fieldKey] = url;
-  }
+  toggleMulti(key: string, optionValue: string, checked: boolean) {
+    const cur = this.getPayloadValue(key);
+    const arr = Array.isArray(cur) ? [...cur] : [];
+    const exists = arr.includes(optionValue);
 
-  removePhoto(fieldKey: string) {
-    if (!this.canEdit()) return;
-
-    const old = this.photoPreviewUrls[fieldKey];
-    if (old) {
-      try {
-        URL.revokeObjectURL(old);
-      } catch {}
-      delete this.photoPreviewUrls[fieldKey];
+    if (checked && !exists) arr.push(optionValue);
+    if (!checked && exists) {
+      const idx = arr.indexOf(optionValue);
+      if (idx >= 0) arr.splice(idx, 1);
     }
 
-    const current = this.getPayloadValue(fieldKey);
-    if (current) delete this.payload[fieldKey];
-  }
-
-  async capturePhoto(fieldKey: string, purpose?: string) {
-    if (!this.canEdit()) return;
-
-    this.emitError('');
-
-    try {
-      const photo: Photo = await Camera.getPhoto({
-        quality: 85,
-        resultType: CameraResultType.Uri,
-        source: CameraSource.Camera,
-        allowEditing: false,
-        saveToGallery: false,
-      });
-
-      const webPath = photo.webPath;
-      if (!webPath) {
-        this.emitError('Não foi possível obter o caminho da foto.');
-        return;
-      }
-
-      const blob = await this.fetchAsBlob(webPath);
-      const ext = this.guessExtension(photo.format);
-      const filename = `photo_${Date.now()}.${ext}`;
-      const file = new File([blob], filename, {
-        type: blob.type || `image/${ext}`,
-      });
-
-      this.setPhotoPreview(fieldKey, URL.createObjectURL(file));
-
-      const uploaded = await firstValueFrom(
-        this.api
-          .uploadFile(this.tenantId, file, file.name, 'photos', purpose || 'PHOTO')
-          .pipe(takeUntil(this.destroy$)),
-      );
-
-      const fileObjectId = uploaded?.id_file_object;
-      if (!fileObjectId) {
-        this.emitError('Upload da foto falhou (id_file_object vazio).');
-        console.error('Upload response:', uploaded);
-        return;
-      }
-
-      this.setPayloadValue(fieldKey, {
-        id_file_object: fileObjectId,
-        kind: 'PHOTO',
-        purpose: purpose || 'PHOTO',
-      });
-
-      this.emitError('');
-    } catch (e) {
-      this.emitError('Erro ao capturar/enviar foto.');
-      console.error(e);
-    }
-  }
-
-  private async fetchAsBlob(url: string): Promise<Blob> {
-    const res = await fetch(url);
-    return await res.blob();
-  }
-
-  private guessExtension(format?: string): string {
-    const f = (format || '').toLowerCase();
-    if (f === 'png') return 'png';
-    if (f === 'jpeg' || f === 'jpg') return 'jpg';
-    if (f === 'heic') return 'heic';
-    return 'jpg';
-  }
-
-  // -------------------------
-  // SIGNATURE
-  // -------------------------
-  async openSignature(fieldKey: string) {
-    if (!this.canEdit()) return;
-
-    this.signatureFieldKey = fieldKey;
-    await this.signatureModal?.present();
-  }
-
-  clearSignature() {
-    if (!this.canEdit()) return;
-
-    try {
-      this.sigPad?.clear?.();
-    } catch {}
-  }
-
-  async saveSignatureToPayload() {
-    if (!this.canEdit()) return;
-    if (!this.signatureFieldKey) return;
-
-    const isEmpty = this.sigPad?.isEmpty?.() === true;
-    if (isEmpty) {
-      this.emitError('Assine antes de guardar.');
-      return;
-    }
-
-    const dataUrl: string | undefined = this.sigPad?.toDataURL?.('image/png');
-    if (!dataUrl) {
-      this.emitError('Não foi possível capturar a assinatura.');
-      return;
-    }
-
-    const file = this.dataUrlToFile(dataUrl, `signature_${Date.now()}.png`);
-
-    try {
-      const uploaded = await firstValueFrom(
-        this.api
-          .uploadFile(this.tenantId, file, file.name, 'signatures', 'SIGNATURE')
-          .pipe(takeUntil(this.destroy$)),
-      );
-
-      const fileObjectId = uploaded?.id_file_object;
-      if (!fileObjectId) {
-        this.emitError('Upload da assinatura falhou (id_file_object vazio).');
-        console.error('Upload response:', uploaded);
-        return;
-      }
-
-      this.setPayloadValue(this.signatureFieldKey, {
-        id_file_object: fileObjectId,
-        kind: 'SIGNATURE',
-      });
-
-      await this.signatureModal?.dismiss();
-      this.signatureFieldKey = null;
-
-      this.emitError('');
-    } catch (e) {
-      this.emitError('Erro ao enviar assinatura.');
-      console.error(e);
-    }
-  }
-
-  private dataUrlToFile(dataUrl: string, filename: string): File {
-    const arr = dataUrl.split(',');
-    const mimeMatch = arr[0].match(/:(.*?);/);
-    const mime = mimeMatch ? mimeMatch[1] : 'image/png';
-    const bstr = atob(arr[arr.length - 1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) u8arr[n] = bstr.charCodeAt(n);
-    return new File([u8arr], filename, { type: mime });
-  }
-
-  // -------------------------
-  // Error channel
-  // -------------------------
-  private emitError(msg: string) {
-    this.error.emit(msg);
+    this.setPayloadValue(key, arr);
   }
 }

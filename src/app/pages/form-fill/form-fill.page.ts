@@ -1,175 +1,162 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
-import {
-  IonBackButton,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonSpinner,
-  IonText,
-  IonTitle,
-  IonToolbar,
-} from '@ionic/angular/standalone';
-import { firstValueFrom, Subject, takeUntil } from 'rxjs';
+import { Component, OnDestroy } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { IonicModule, ToastController } from '@ionic/angular';
+import { Subject, takeUntil } from 'rxjs';
 import { ApiService } from 'src/app/services/api';
-
-import { FormRendererComponent } from '../../components/form-renderer/form-renderer.component';
-import { FormElement } from '../../components/form-renderer/form-renderer.types';
-
-
-type FormSchema = {
-  schema_version: string;
-  default_language: string;
-  sections: Array<{
-    id: string;
-    title?: Record<string, string>;
-    elements: FormElement[];
-  }>;
-};
+import { FormRendererComponent } from 'src/app/components/form-renderer/form-renderer.component';
 
 @Component({
   selector: 'app-form-fill',
   standalone: true,
+  imports: [CommonModule, IonicModule, FormRendererComponent],
   templateUrl: './form-fill.page.html',
-  imports: [
-    CommonModule,
-    IonHeader,
-    IonToolbar,
-    IonTitle,
-    IonButtons,
-    IonBackButton,
-    IonContent,
-    IonText,
-    IonSpinner,
-    IonButton,
-    FormRendererComponent,
-  ],
+  styleUrls: ['./form-fill.page.scss'],
 })
-export class FormFillPage implements OnInit, OnDestroy {
+export class FormFillPage implements OnDestroy {
   private destroy$ = new Subject<void>();
 
   tenantId = 1;
 
-  // placeholders atuais (mantendo tua abordagem)
-  clinicId = 1;
+  loading = true;
+  idForm!: number;
 
-  // backend exige client_id numérico (não pode ser null)
-  clientId: number = 1;
+  formName = '';
+  versionId: number | null = null;
 
-  idForm = 0;
-  idFormVersion = 0;
-
-  loading = false;
-  errorMsg = '';
-
+  // schema renderer
+  elements: any[] = [];
   defaultLang = 'pt-PT';
-  elements: FormElement[] = [];
 
-  payload: Record<string, any> = {};
+  // submission/payload
   submissionId: number | null = null;
+  payload: any = {};
 
-  constructor(private route: ActivatedRoute, private api: ApiService) {}
+  constructor(
+    private route: ActivatedRoute,
+    private router: Router,
+    private api: ApiService,
+    private toastCtrl: ToastController
+  ) {}
 
-  ngOnInit() {
-    // aceita os dois nomes (id_form e idForm) para evitar quebra por rota
-    const p1 = this.route.snapshot.paramMap.get('id_form');
-    const p2 = this.route.snapshot.paramMap.get('idForm');
-    this.idForm = Number(p1 || p2 || 0);
+  ionViewWillEnter() {
+    this.loading = true;
 
-    this.loadForm();
+    const id = Number(this.route.snapshot.paramMap.get('id'));
+    if (!id || Number.isNaN(id)) {
+      this.loading = false;
+      this.router.navigateByUrl('/forms');
+      return;
+    }
+
+    this.idForm = id;
+    this.loadLatest();
   }
 
-  ngOnDestroy() {
+  ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
   }
 
-  async loadForm() {
-    this.loading = true;
-    this.errorMsg = '';
-    this.elements = [];
+  private loadLatest() {
+    this.api
+      .listFormVersions(this.tenantId, this.idForm)
+      //.getLatestFormVersion(this.tenantId, this.idForm)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res: any) => {
+          // Esperado do backend (exemplos comuns):
+          // res.form.name, res.version.id_form_version, res.version.schema_json, etc.
+          const form = res?.form || {};
+          const ver = res?.version || res?.latest || res || {};
 
-    try {
-      const fv = await firstValueFrom(
-        this.api.getLatestFormVersion(this.tenantId, this.idForm).pipe(takeUntil(this.destroy$)),
-      );
+          this.formName = form?.name || res?.name || 'Formulário';
+          this.versionId = ver?.id_form_version ?? ver?.id ?? null;
 
-      this.idFormVersion = Number(fv?.id_form_version || 0);
+          const schema = ver?.schema_json || ver?.schema || null;
 
-      const raw = fv?.schema_json;
-      if (!raw) {
-        this.errorMsg = 'Schema não encontrado.';
-        return;
+          this.defaultLang = schema?.default_language || form?.default_language || 'pt-PT';
+
+          // seu schema pode ser { sections:[{elements:[]}] } ou direto {elements:[]}
+          const sections = Array.isArray(schema?.sections) ? schema.sections : [];
+          if (sections.length > 0) {
+            this.elements = (sections[0]?.elements || []) as any[];
+          } else {
+            this.elements = Array.isArray(schema?.elements) ? schema.elements : [];
+          }
+
+          this.loading = false;
+        },
+        error: async (err) => {
+          console.error(err);
+          this.loading = false;
+          const t = await this.toastCtrl.create({
+            message: 'Erro ao carregar formulário.',
+            duration: 2500,
+            color: 'danger',
+          });
+          await t.present();
+        },
+      });
+  }
+
+  // ✅ Agora aceita ErrorEvent / qualquer coisa, sem erro de compile
+  async onRendererError(err: unknown) {
+    console.error('Renderer error:', err);
+
+    let msg = 'Erro ao renderizar formulário.';
+    if (typeof err === 'string') msg = err;
+    else if (err && typeof err === 'object') {
+      // ErrorEvent costuma ter message
+      const anyErr: any = err;
+      if (typeof anyErr?.message === 'string' && anyErr.message.trim()) {
+        msg = anyErr.message;
       }
-
-      const parsed: FormSchema = typeof raw === 'string' ? JSON.parse(raw) : raw;
-
-      this.defaultLang = parsed?.default_language || 'pt-PT';
-
-      const sections = Array.isArray(parsed?.sections) ? parsed.sections : [];
-      this.elements = sections.reduce<FormElement[]>((acc, s) => {
-        const els = Array.isArray(s?.elements) ? s.elements : [];
-        return acc.concat(els);
-      }, []);
-
-      if (this.elements.length === 0) {
-        this.errorMsg = 'Nenhum campo encontrado neste formulário.';
-      }
-    } catch (e) {
-      this.errorMsg = 'Erro ao carregar formulário.';
-      console.error(e);
-    } finally {
-      this.loading = false;
     }
+
+    const t = await this.toastCtrl.create({
+      message: msg,
+      duration: 3000,
+      color: 'danger',
+    });
+    await t.present();
   }
 
-  onRendererError(msg: string) {
-    // msg vazio = limpar
-    this.errorMsg = msg || '';
-  }
-
+  // opcional: se você já tem botão salvar em outro lugar, pode ignorar.
   async save() {
-    this.errorMsg = '';
-
-    if (!this.idFormVersion) {
-      this.errorMsg = 'Versão do formulário inválida.';
+    if (!this.submissionId) {
+      // Se sua main cria submission antes, mantenha igual.
+      // Aqui deixo apenas uma mensagem para não quebrar.
+      const t = await this.toastCtrl.create({
+        message: 'Nenhuma submissão ativa para salvar.',
+        duration: 2200,
+        color: 'warning',
+      });
+      await t.present();
       return;
     }
 
-    try {
-      if (!this.submissionId) {
-        const created = await firstValueFrom(
-          this.api
-            .createSubmission({
-              tenant_id: this.tenantId,
-              clinic_id: this.clinicId,
-              client_id: this.clientId,
-              id_form: this.idForm,
-              id_form_version: this.idFormVersion,
-            })
-            .pipe(takeUntil(this.destroy$)),
-        );
-
-        this.submissionId = created?.id_form_submission ?? null;
-      }
-
-      if (!this.submissionId) {
-        this.errorMsg = 'Não foi possível criar a submissão.';
-        return;
-      }
-
-      await firstValueFrom(
-        this.api
-          .saveSubmissionPayload(this.submissionId, this.tenantId, this.payload)
-          .pipe(takeUntil(this.destroy$)),
-      );
-
-      this.errorMsg = '';
-    } catch (e) {
-      this.errorMsg = 'Erro ao guardar.';
-      console.error(e);
-    }
+    this.api
+      .saveSubmissionPayload(this.submissionId, this.tenantId, this.payload)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: async () => {
+          const t = await this.toastCtrl.create({
+            message: 'Submissão salva.',
+            duration: 1800,
+            color: 'success',
+          });
+          await t.present();
+        },
+        error: async (e) => {
+          console.error(e);
+          const t = await this.toastCtrl.create({
+            message: 'Erro ao salvar submissão.',
+            duration: 2500,
+            color: 'danger',
+          });
+          await t.present();
+        },
+      });
   }
 }

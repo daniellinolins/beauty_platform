@@ -1,60 +1,66 @@
+import os
+from flask import current_app, g
 import pymysql
-from flask import g, current_app
-import json
-
-def _normalize_params(params: dict | None):
-    if not params:
-        return {}
-    out = {}
-    for k, v in params.items():
-        if isinstance(v, (dict, list)):
-            out[k] = json.dumps(v, ensure_ascii=False)
-        else:
-            out[k] = v
-    return out
 
 
+def _cfg(key: str, default=None):
+    # Prefer Flask config, but fallback to env vars so the API can run without a separate config.py
+    return current_app.config.get(key, os.getenv(key, default))
 
 
 def get_conn():
-    if "db_conn" not in g:
-        g.db_conn = pymysql.connect(
-            host=current_app.config["DB_HOST"],
-            port=current_app.config["DB_PORT"],
-            user=current_app.config["DB_USER"],
-            password=current_app.config["DB_PASSWORD"],
-            database=current_app.config["DB_NAME"],
+    conn = getattr(g, '_db_conn', None)
+    if conn is None:
+        conn = pymysql.connect(
+            host=_cfg('DB_HOST', 'localhost'),
+            user=_cfg('DB_USER', 'root'),
+            password=_cfg('DB_PASSWORD', ''),
+            database=_cfg('DB_NAME', _cfg('DB_DATABASE', 'beauty_platform')),
+            port=int(_cfg('DB_PORT', 3306)),
+            charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor,
-            autocommit=False,
+            autocommit=True,
         )
-    return g.db_conn
+        g._db_conn = conn
+    return conn
 
-def close_conn(e=None):
-    conn = g.pop("db_conn", None)
-    if conn:
-        conn.close()
 
-def fetch_one(sql: str, params: dict | None = None):
+def close_conn(_exc=None):
+    conn = getattr(g, '_db_conn', None)
+    if conn is not None:
+        try:
+            conn.close()
+        finally:
+            g._db_conn = None
+
+
+def fetch_all(sql: str, params=None):
     conn = get_conn()
     with conn.cursor() as cur:
-        cur.execute(sql, params or {})
-        return cur.fetchone()
-
-def fetch_all(sql: str, params: dict | None = None):
-    conn = get_conn()
-    with conn.cursor() as cur:
-        cur.execute(sql, params or {})
+        cur.execute(sql, params or ())
         return cur.fetchall()
 
-def execute(sql: str, params: dict | None = None) -> int:
+
+def fetch_one(sql: str, params=None):
     conn = get_conn()
     with conn.cursor() as cur:
-        cur.execute(sql, params or {})
-        conn.commit()
+        cur.execute(sql, params or ())
+        return cur.fetchone()
+
+
+def execute(sql: str, params=None):
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute(sql, params or ())
         return cur.lastrowid
 
-def execute_no_return(sql: str, params: dict | None = None):
+
+def execute_no_return(sql: str, params=None):
     conn = get_conn()
     with conn.cursor() as cur:
-        cur.execute(sql, _normalize_params(params))
-        conn.commit()
+        cur.execute(sql, params or ())
+
+
+# Backwards-compatible aliases (some files were importing these names)
+query_all = fetch_all
+query_one = fetch_one

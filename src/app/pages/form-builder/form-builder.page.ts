@@ -1,17 +1,16 @@
+import { IonicModule } from '@ionic/angular';
+
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import {
   AlertController,
-  ModalController,
-  NavController,
-} from '@ionic/angular';
-import {
-  IonBackButton,
   IonButton,
   IonButtons,
   IonContent,
   IonHeader,
+  IonInput,
   IonItem,
   IonLabel,
   IonList,
@@ -19,100 +18,104 @@ import {
   IonReorderGroup,
   IonSegment,
   IonSegmentButton,
-  IonSpinner,
-  IonText,
-  IonTitle,
-  IonToolbar,
-  ItemReorderEventDetail,
-  IonInput,
-  IonTextarea,
   IonSelect,
   IonSelectOption,
+  IonText,
+  IonTextarea,
+  IonTitle,
+  IonToolbar,
+  ModalController,
+  ReorderEndCustomEvent,
+  ToastController,
 } from '@ionic/angular/standalone';
-import { firstValueFrom, Subject, takeUntil } from 'rxjs';
-
-import { ApiService } from 'src/app/services/api';
+import { Subject, firstValueFrom } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
+import { ApiService, FormStatus, VersionStatus } from 'src/app/services/api';
 import { FormSchema, FormSection, makeEmptySchema } from './form-schema.types';
 import { FormElement } from 'src/app/components/form-renderer/form-renderer.types';
-
 import { ElementEditorModal } from './modals/element-editor.modal';
 import { FormPreviewModal } from './modals/form-preview.modal';
 
 @Component({
   selector: 'app-form-builder',
+  templateUrl: './form-builder.page.html',
+  styleUrls: ['./form-builder.page.scss'],
   standalone: true,
   imports: [
+    IonicModule,
     CommonModule,
+    FormsModule,
     IonHeader,
     IonToolbar,
     IonTitle,
-    IonButtons,
-    IonBackButton,
     IonContent,
-    IonText,
-    IonSpinner,
+    IonButtons,
     IonButton,
+    IonText,
     IonSegment,
     IonSegmentButton,
-    IonList,
     IonItem,
     IonLabel,
-    IonReorderGroup,
-    IonReorder,
     IonInput,
     IonTextarea,
     IonSelect,
     IonSelectOption,
+    IonList,
+    IonReorderGroup,
+    IonReorder,
   ],
-  templateUrl: './form-builder.page.html',
 })
 export class FormBuilderPage implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
-
-  tenantId = 1;
 
   loading = false;
   errorMsg = '';
   infoMsg = '';
 
-  idForm: number | null = null;
-  isNew = false;
+  // route param
+  idForm = 0;
+  tenantId = 1;
 
+  // tabs
+  tab: 'meta' | 'structure' | 'versions' = 'meta';
+
+  // form meta
   formName = '';
   formDescription = '';
-  formStatus: 'ACTIVE' | 'INACTIVE' = 'ACTIVE';
-  defaultLanguage = 'pt-PT';
+  formStatus: FormStatus = 'ACTIVE';
+  defaultLanguage = 'pt';
 
-  idFormVersion: number | null = null;
-  versionNumber: number | null = null;
-  versionStatus: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' = 'DRAFT';
-
-  schema: FormSchema = makeEmptySchema(this.defaultLanguage);
-
-  tab: 'meta' | 'structure' | 'versions' = 'meta';
-  selectedSectionIndex = 0;
-
+  // versions
   versions: any[] = [];
+  idFormVersion = 0;
+  versionStatus: VersionStatus = 'DRAFT';
+  versionNumber = 0;
+
+  // schema being edited (always the current draft)
+  schema: FormSchema = makeEmptySchema('pt');
+  selectedSectionIndex = 0;
 
   constructor(
     private route: ActivatedRoute,
     private api: ApiService,
-    private nav: NavController,
     private modalCtrl: ModalController,
-    private alertCtrl: AlertController
+    private alertCtrl: AlertController,
+    private toastCtrl: ToastController,
   ) {}
 
   ngOnInit() {
-    const id = this.route.snapshot.paramMap.get('idForm');
-    if (!id) {
-      this.isNew = true;
-      this.initNew();
-      return;
-    }
+    this.tenantId = Number(
+      this.route.snapshot.queryParamMap.get('tenant_id') || 1,
+    );
+    this.idForm = Number(this.route.snapshot.paramMap.get('id') || 0);
 
-    this.isNew = false;
-    this.idForm = Number(id);
-    this.loadForEdit();
+    if (this.idForm) {
+      // existing form
+      void this.loadLatestDraftOrLatest();
+    } else {
+      // new form
+      this.schema = makeEmptySchema(this.defaultLanguage);
+    }
   }
 
   ngOnDestroy() {
@@ -120,148 +123,108 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  // -----------------------------
-  // Helpers p/ HTML
-  // -----------------------------
-  setTab(v: any) {
-    this.tab = v as any;
+  // ---------------------
+  // Template helpers
+  // ---------------------
+
+  // se você usa idForm (number) como “0 = novo”
+  get isNew(): boolean {
+    return !this.idForm || this.idForm <= 0;
   }
 
-  setFormName(v: any) {
-    this.formName = (v ?? '').toString();
+  setTab(value: any) {
+    const v = (value ?? 'meta') as string;
+    this.tab =
+      v === 'structure' || v === 'versions' || v === 'meta'
+        ? (v as any)
+        : 'meta';
   }
 
-  setFormDescription(v: any) {
-    this.formDescription = (v ?? '').toString();
+  setFormName(v: string) {
+    this.formName = v || '';
   }
 
-  setFormStatus(v: any) {
-    this.formStatus = (v ?? 'ACTIVE') as any;
+  setFormDescription(v: string) {
+    this.formDescription = v || '';
   }
 
-  setDefaultLanguage(v: any) {
-    this.defaultLanguage = (v ?? 'pt-PT').toString();
-    this.schema.default_language = this.defaultLanguage;
+  setFormStatus(v: string) {
+    this.formStatus = (v as FormStatus) || 'ACTIVE';
+  }
+
+  setDefaultLanguage(v: string) {
+    this.defaultLanguage = v || 'pt';
+    if (this.schema) this.schema.default_language = this.defaultLanguage;
   }
 
   get sections(): FormSection[] {
-    return this.schema.sections || [];
-  }
-
-  get currentSection(): FormSection | null {
-    const s = this.sections[this.selectedSectionIndex];
-    return s || null;
+    return this.schema?.sections || [];
   }
 
   get currentElements(): FormElement[] {
-    return (this.currentSection?.elements || []) as FormElement[];
+    const s = this.sections?.[this.selectedSectionIndex];
+    return s?.elements || [];
   }
 
-  // -----------------------------
-  // Init
-  // -----------------------------
-  initNew() {
-    this.loading = false;
-    this.errorMsg = '';
-    this.infoMsg = '';
-    this.idForm = null;
-    this.idFormVersion = null;
-    this.versionNumber = null;
-    this.versionStatus = 'DRAFT';
-    this.schema = makeEmptySchema(this.defaultLanguage);
-    this.schema.sections = [
-      {
-        id: this.uuid(),
-        title: { [this.defaultLanguage]: 'Seção 1' },
-        elements: [],
-      },
-    ];
-    this.selectedSectionIndex = 0;
-    this.tab = 'meta';
+  isField(el: FormElement): boolean {
+    return el.type === 'FIELD';
   }
 
-  // -----------------------------
-  // Create form + first draft
-  // -----------------------------
-  async createNewFormAndDraft() {
-    this.errorMsg = '';
-    this.infoMsg = '';
+  fieldKey(el: FormElement): string {
+    return el.type === 'FIELD' ? el.key : '';
+  }
+
+  fieldInputType(el: FormElement): string {
+    return el.type === 'FIELD' ? el.input_type : '';
+  }
+
+  staticText(el: FormElement): string {
+    if (el.type === 'TEXT_BLOCK') return el.text?.[this.defaultLanguage] || '';
+    if (el.type === 'IMAGE_DECORATIVE')
+      return el.alt?.[this.defaultLanguage] || '';
+    if (el.type === 'DIVIDER') return '---';
+    return '';
+  }
+
+  // ---------------------
+  // Loading
+  // ---------------------
+
+  private async loadLatestDraftOrLatest() {
     this.loading = true;
-
+    this.errorMsg = '';
     try {
-      if (!this.formName.trim()) {
-        this.errorMsg = 'Nome do formulário é obrigatório.';
-        return;
-      }
-
-      const createdForm = await firstValueFrom(
-        this.api
-          .createForm({
-            tenant_id: this.tenantId,
-            name: this.formName.trim(),
-            description: this.formDescription || '',
-            status: this.formStatus,
-            default_language: this.defaultLanguage,
-          })
-          .pipe(takeUntil(this.destroy$))
+      // Load latest version (backend decides what is latest)
+      const latest = await firstValueFrom(
+        this.api.getLatestFormVersion(this.tenantId, this.idForm),
       );
 
-      this.idForm = Number(createdForm?.id_form);
-      if (!this.idForm) throw new Error('createForm não retornou id_form');
+      this.idFormVersion = Number(latest?.id_form_version || 0);
+      this.versionStatus = (latest?.version_status || 'DRAFT') as VersionStatus;
+      this.versionNumber = Number(latest?.version_number || 0);
 
+      // meta fields (when backend includes them)
+      this.formName = latest?.form_name || latest?.name || this.formName;
+      this.formDescription =
+        latest?.form_description || latest?.description || this.formDescription;
+      this.formStatus = (latest?.form_status ||
+        latest?.status ||
+        this.formStatus) as FormStatus;
+      this.defaultLanguage = latest?.default_language || this.defaultLanguage;
+
+      const rawSchema = latest?.schema_json;
+      this.schema =
+        rawSchema && typeof rawSchema === 'object'
+          ? rawSchema
+          : makeEmptySchema(this.defaultLanguage);
+      if (!this.schema.sections?.length)
+        this.schema = makeEmptySchema(this.defaultLanguage);
       this.schema.default_language = this.defaultLanguage;
 
-      const createdVer = await firstValueFrom(
-        this.api
-          .createFormVersion({
-            tenant_id: this.tenantId,
-            id_form: this.idForm,
-            schema_json: this.schema,
-            status: 'DRAFT',
-          })
-          .pipe(takeUntil(this.destroy$))
-      );
-
-      this.idFormVersion = Number(createdVer?.id_form_version);
-      this.versionNumber = Number(createdVer?.version_number || 1);
-      this.versionStatus = (createdVer?.status || 'DRAFT') as any;
-
-      this.isNew = false;
-      this.infoMsg = 'Formulário criado com versão DRAFT.';
       await this.refreshVersions();
-
-      this.nav.navigateRoot(`/forms/builder/${this.idForm}`);
-    } catch (e) {
-      this.errorMsg = 'Erro ao criar formulário.';
+    } catch (e: any) {
+      this.errorMsg = e?.message || 'Falha ao carregar versão.';
       console.error(e);
-    } finally {
-      this.loading = false;
-    }
-  }
-
-  // -----------------------------
-  // Load EDIT
-  // -----------------------------
-  async loadForEdit() {
-    if (!this.idForm) return;
-
-    this.errorMsg = '';
-    this.loading = true;
-
-    try {
-      await this.refreshVersions();
-
-      const draft = this.versions.find((v) => v.status === 'DRAFT');
-      if (draft) {
-        this.applyVersion(draft);
-      } else if (this.versions.length > 0) {
-        this.applyVersion(this.versions[0]);
-      }
-
-      this.tab = 'structure';
-    } catch (e) {
-      console.error(e);
-      this.errorMsg = 'Erro ao carregar formulário.';
     } finally {
       this.loading = false;
     }
@@ -269,259 +232,400 @@ export class FormBuilderPage implements OnInit, OnDestroy {
 
   async refreshVersions() {
     if (!this.idForm) return;
-
-    const list = await firstValueFrom(
-      this.api.listFormVersions(this.idForm, this.tenantId).pipe(takeUntil(this.destroy$))
-    );
-
-    this.versions = list || [];
-  }
-
-  applyVersion(v: any) {
-    this.idFormVersion = Number(v.id_form_version);
-    this.versionNumber = Number(v.version_number);
-    this.versionStatus = (v.status || 'DRAFT') as any;
-
-    if (v.schema_json) {
-      this.schema = v.schema_json;
-      if (!this.schema.sections || this.schema.sections.length === 0) {
-        this.schema.sections = [
-          { id: this.uuid(), title: { [this.defaultLanguage]: 'Seção 1' }, elements: [] },
-        ];
-      }
-    }
-
-    if (!this.schema.default_language) {
-      this.schema.default_language = this.defaultLanguage;
-    } else {
-      this.defaultLanguage = this.schema.default_language;
-    }
-
-    if (this.selectedSectionIndex >= (this.schema.sections?.length || 0)) {
-      this.selectedSectionIndex = 0;
-    }
-  }
-
-  // -----------------------------
-  // Top buttons (HTML)
-  // -----------------------------
-  async preview() {
-    const modal = await this.modalCtrl.create({
-      component: FormPreviewModal,
-      componentProps: {
-        tenantId: this.tenantId,
-        defaultLang: this.defaultLanguage,
-        schema: this.schema,
-      },
-    });
-    await modal.present();
-  }
-
-  async saveDraft() {
-    // Backend ainda não tem PUT version (update). Mantém compatível:
-    // por enquanto cria nova versão DRAFT com o schema atual.
-    await this.createNewDraftFromCurrent();
-  }
-
-  async publish() {
-    // Backend publish ainda não foi implementado por você (passo C).
-    // Por enquanto só alerta.
-    const a = await this.alertCtrl.create({
-      header: 'Publicar',
-      message: 'Endpoint de publicação ainda não foi implementado no backend.',
-      buttons: ['OK'],
-    });
-    await a.present();
-  }
-
-  // -----------------------------
-  // Sections
-  // -----------------------------
-  selectSection(i: number) {
-    this.selectedSectionIndex = i;
-  }
-
-  async renameSection(i: number) {
-    const current = this.sections[i];
-    const currentTitle = (current?.title?.[this.defaultLanguage] || '').toString();
-
-    const alert = await this.alertCtrl.create({
-      header: 'Renomear seção',
-      inputs: [
-        {
-          name: 'title',
-          type: 'text',
-          value: currentTitle,
-          placeholder: 'Título da seção',
-        },
-      ],
-      buttons: [
-        { text: 'Cancelar', role: 'cancel' },
-        {
-          text: 'Salvar',
-          handler: (data) => {
-            const t = (data?.title || '').toString().trim();
-            if (!t) return;
-            current.title = current.title || {};
-            current.title[this.defaultLanguage] = t;
-          },
-        },
-      ],
-    });
-
-    await alert.present();
-  }
-
-  removeSection(i: number) {
-    if (this.sections.length <= 1) return;
-    this.sections.splice(i, 1);
-    if (this.selectedSectionIndex >= this.sections.length) this.selectedSectionIndex = this.sections.length - 1;
-  }
-
-  addSection() {
-    const n = this.sections.length + 1;
-    this.sections.push({
-      id: this.uuid(),
-      title: { [this.defaultLanguage]: `Seção ${n}` },
-      elements: [],
-    });
-    this.selectedSectionIndex = this.sections.length - 1;
-  }
-
-  reorderSections(ev: CustomEvent<ItemReorderEventDetail>) {
-    const from = ev.detail.from;
-    const to = ev.detail.to;
-    const moved = this.sections.splice(from, 1)[0];
-    this.sections.splice(to, 0, moved);
-    ev.detail.complete();
-    this.selectedSectionIndex = to;
-  }
-
-  // -----------------------------
-  // Elements
-  // -----------------------------
-  reorderElements(ev: CustomEvent<ItemReorderEventDetail>) {
-    const els = this.currentElements;
-    const moved = els.splice(ev.detail.from, 1)[0];
-    els.splice(ev.detail.to, 0, moved);
-    ev.detail.complete();
-  }
-
-  async addElement() {
-    if (!this.currentSection) return;
-
-    const modal = await this.modalCtrl.create({
-      component: ElementEditorModal,
-      componentProps: {
-        defaultLanguage: this.defaultLanguage,
-        element: null,
-      },
-    });
-
-    await modal.present();
-    const { data } = await modal.onDidDismiss();
-    if (data?.element) {
-      this.currentSection.elements = this.currentSection.elements || [];
-      this.currentSection.elements.push(data.element);
-    }
-  }
-
-  async editElement(index: number) {
-    if (!this.currentSection) return;
-    const el = this.currentSection.elements?.[index];
-    if (!el) return;
-
-    const modal = await this.modalCtrl.create({
-      component: ElementEditorModal,
-      componentProps: {
-        defaultLanguage: this.defaultLanguage,
-        element: el,
-      },
-    });
-
-    await modal.present();
-    const { data } = await modal.onDidDismiss();
-    if (data?.element) {
-      this.currentSection.elements[index] = data.element;
-    }
-  }
-
-  removeElement(i: number) {
-    if (!this.currentSection?.elements) return;
-    this.currentSection.elements.splice(i, 1);
-  }
-
-  // Helpers usados no HTML
-  isField(el: any): boolean {
-    return el?.type === 'FIELD';
-  }
-
-  fieldKey(el: any): string {
-    return el?.key || el?.field?.key || '';
-  }
-
-  fieldInputType(el: any): string {
-    return el?.input_type || el?.field?.input_type || '';
-  }
-
-  staticText(el: any): string {
-    const t = el?.text;
-    if (!t) return '';
-    if (typeof t === 'string') return t;
-    return t?.[this.defaultLanguage] || '';
-  }
-
-  // -----------------------------
-  // Versions list actions
-  // -----------------------------
-  async createNewDraftFromCurrent() {
-    if (!this.idForm) return;
-
-    this.errorMsg = '';
-    this.infoMsg = '';
-    this.loading = true;
-
     try {
-      const createdVer = await firstValueFrom(
+      const list = await firstValueFrom(
         this.api
-          .createFormVersion({
-            tenant_id: this.tenantId,
-            id_form: this.idForm,
-            schema_json: this.schema,
-            status: 'DRAFT',
-          })
-          .pipe(takeUntil(this.destroy$))
+          .listFormVersions(this.idForm, this.tenantId)
+          .pipe(takeUntil(this.destroy$)),
+      );
+      // list can be array or {items:[]}
+      const items = Array.isArray(list) ? list : (list as any)?.items;
+      this.versions = Array.isArray(items) ? items : [];
+    } catch (e) {
+      console.warn('refreshVersions failed', e);
+    }
+  }
+
+  // ---------------------
+  // Create / Save / Publish
+  // ---------------------
+
+  async createNewFormAndDraft() {
+    this.loading = true;
+    this.errorMsg = '';
+    try {
+      if (!this.formName.trim()) {
+        await this.toast('Informe o nome do formulário.');
+        return;
+      }
+
+      const form = await firstValueFrom(
+        this.api.createForm({
+          tenant_id: this.tenantId,
+          name: this.formName.trim(),
+          description: this.formDescription || undefined,
+          status: this.formStatus,
+          default_language: this.defaultLanguage,
+        }),
       );
 
-      this.idFormVersion = Number(createdVer?.id_form_version);
-      this.versionNumber = Number(createdVer?.version_number || 1);
-      this.versionStatus = (createdVer?.status || 'DRAFT') as any;
+      this.idForm = Number(form?.id_form || form?.id || 0);
+
+      const draftSchema = this.schema || makeEmptySchema(this.defaultLanguage);
+      const v = await firstValueFrom(
+        this.api.createFormVersion({
+          tenant_id: this.tenantId,
+          id_form: this.idForm,
+          status: 'DRAFT',
+          schema_json: draftSchema,
+        }),
+      );
+
+      this.idFormVersion = Number(v?.id_form_version || v?.id || 0);
+      this.versionStatus = (v?.version_status || 'DRAFT') as VersionStatus;
+      this.versionNumber = Number(v?.version_number || 1);
 
       await this.refreshVersions();
-      this.infoMsg = 'Nova versão DRAFT criada.';
       this.tab = 'structure';
-    } catch (e) {
+      await this.toast('Formulário criado.');
+    } catch (e: any) {
       console.error(e);
-      this.errorMsg = 'Erro ao criar nova versão DRAFT.';
+      this.errorMsg = e?.message || 'Falha ao criar formulário.';
     } finally {
       this.loading = false;
     }
   }
 
-  loadVersionFromList(v: any) {
-    this.applyVersion(v);
-    this.tab = 'structure';
+  async saveDraft() {
+    if (!this.idForm || !this.idFormVersion) {
+      await this.toast('Crie o formulário primeiro.');
+      return;
+    }
+    if (this.versionStatus !== 'DRAFT') {
+      await this.toast('Somente versões DRAFT podem ser alteradas.');
+      return;
+    }
+
+    this.loading = true;
+    this.errorMsg = '';
+    try {
+      // Update form meta
+      await firstValueFrom(
+        this.api.updateForm(this.idForm, {
+          tenant_id: this.tenantId,
+          name: this.formName,
+          description: this.formDescription,
+          status: this.formStatus,
+          default_language: this.defaultLanguage,
+        }),
+      );
+
+      // Update version
+      await firstValueFrom(
+        this.api.updateFormVersion(this.idForm, this.idFormVersion, {
+          tenant_id: this.tenantId,
+          version_status: 'DRAFT',
+          schema_json: this.schema,
+        }),
+      );
+
+      await this.refreshVersions();
+      await this.toast('Rascunho salvo.');
+    } catch (e: any) {
+      console.error(e);
+      this.errorMsg = e?.message || 'Falha ao salvar rascunho.';
+    } finally {
+      this.loading = false;
+    }
   }
 
-  // -----------------------------
-  // Utils
-  // -----------------------------
-  private uuid(): string {
-    // simples e suficiente para o builder
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-      const r = (Math.random() * 16) | 0;
-      const v = c === 'x' ? r : (r & 0x3) | 0x8;
-      return v.toString(16);
+  async publish() {
+    if (!this.idForm || !this.idFormVersion) return;
+    if (this.versionStatus !== 'DRAFT') {
+      await this.toast('Apenas DRAFT pode ser publicado.');
+      return;
+    }
+
+    const alert = await this.alertCtrl.create({
+      header: 'Publicar versão',
+      message:
+        'Deseja publicar esta versão? Após publicar, ela não poderá ser editada.',
+      buttons: [
+        { text: 'Cancelar', role: 'cancel' },
+        {
+          text: 'Publicar',
+          role: 'confirm',
+          handler: () => {
+            void this.doPublish();
+          },
+        },
+      ],
     });
+    await alert.present();
+  }
+
+  private async doPublish() {
+    this.loading = true;
+    this.errorMsg = '';
+    try {
+      await firstValueFrom(
+        this.api.publishFormVersion({
+          tenant_id: this.tenantId,
+          id_form: this.idForm,
+          id_form_version: this.idFormVersion,
+        }),
+      );
+      await this.toast('Publicado com sucesso.');
+      await this.loadLatestDraftOrLatest();
+    } catch (e: any) {
+      console.error(e);
+      this.errorMsg = e?.message || 'Falha ao publicar.';
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  async createNewDraftFromCurrent() {
+    if (!this.idForm) return;
+
+    this.loading = true;
+    this.errorMsg = '';
+    try {
+      const v = await firstValueFrom(
+        this.api.createFormVersion({
+          tenant_id: this.tenantId,
+          id_form: this.idForm,
+          status: 'DRAFT',
+          schema_json: this.schema,
+        }),
+      );
+
+      this.idFormVersion = Number(v?.id_form_version || v?.id || 0);
+      this.versionStatus = (v?.version_status || 'DRAFT') as VersionStatus;
+      this.versionNumber = Number(v?.version_number || this.versionNumber + 1);
+
+      await this.refreshVersions();
+      await this.toast('Novo rascunho criado.');
+    } catch (e: any) {
+      console.error(e);
+      this.errorMsg = e?.message || 'Falha ao criar novo rascunho.';
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  // ---------------------
+  // Sections
+  // ---------------------
+
+  selectSection(i: number) {
+    this.selectedSectionIndex = i;
+  }
+
+  reorderSections(ev: ReorderEndCustomEvent) {
+    const from = ev.detail.from;
+    const to = ev.detail.to;
+    if (from === to) {
+      ev.detail.complete(true);
+      return;
+    }
+
+    const s = [...this.sections];
+    const [moved] = s.splice(from, 1);
+    s.splice(to, 0, moved);
+    this.schema.sections = s;
+    this.selectedSectionIndex = to;
+    ev.detail.complete(true);
+  }
+
+  async addSection() {
+    if (this.versionStatus !== 'DRAFT') return;
+    const alert = await this.alertCtrl.create({
+      header: 'Nova seção',
+      inputs: [{ name: 'title', placeholder: 'Título' }],
+      buttons: [
+        { text: 'Cancelar', role: 'cancel' },
+        {
+          text: 'Ok',
+          role: 'confirm',
+          handler: (data) => {
+            const title = (data?.title || '').trim();
+            const newSec: FormSection = {
+              id: `sec_${Date.now()}`, // <-- obrigatório
+              title: {
+                [this.defaultLanguage]: `Seção ${this.sections.length + 1}`,
+              },
+              elements: [] as FormElement[],
+            };
+            this.sections.push(newSec);
+            this.schema.sections = [...this.sections, newSec];
+            this.selectedSectionIndex = this.sections.length - 1;
+          },
+        },
+      ],
+    });
+    await alert.present();
+  }
+
+  async renameSection(i: number) {
+    if (this.versionStatus !== 'DRAFT') return;
+    const current = this.sections[i];
+    const currentTitle = current?.title?.[this.defaultLanguage] || '';
+    const alert = await this.alertCtrl.create({
+      header: 'Renomear seção',
+      inputs: [{ name: 'title', value: currentTitle }],
+      buttons: [
+        { text: 'Cancelar', role: 'cancel' },
+        {
+          text: 'Ok',
+          role: 'confirm',
+          handler: (data) => {
+            const title = (data?.title || '').trim();
+            const updated = {
+              ...current,
+              title: {
+                ...(current.title || {}),
+                [this.defaultLanguage]: title,
+              },
+            };
+            const arr = [...this.sections];
+            arr[i] = updated;
+            this.schema.sections = arr;
+          },
+        },
+      ],
+    });
+    await alert.present();
+  }
+
+  removeSection(i: number) {
+    if (this.versionStatus !== 'DRAFT') return;
+    if (this.sections.length <= 1) return;
+    const arr = [...this.sections];
+    arr.splice(i, 1);
+    this.schema.sections = arr;
+    this.selectedSectionIndex = Math.max(
+      0,
+      Math.min(this.selectedSectionIndex, arr.length - 1),
+    );
+  }
+
+  // ---------------------
+  // Elements
+  // ---------------------
+
+  reorderElements(ev: ReorderEndCustomEvent) {
+    const from = ev.detail.from;
+    const to = ev.detail.to;
+    const sec = this.sections[this.selectedSectionIndex];
+    if (!sec) {
+      ev.detail.complete(true);
+      return;
+    }
+
+    const els = [...(sec.elements || [])];
+    const [moved] = els.splice(from, 1);
+    els.splice(to, 0, moved);
+
+    const sections = [...this.sections];
+    sections[this.selectedSectionIndex] = { ...sec, elements: els };
+    this.schema.sections = sections;
+
+    ev.detail.complete(true);
+  }
+
+  async addElement() {
+    if (this.versionStatus !== 'DRAFT') return;
+
+    const modal = await this.modalCtrl.create({
+      component: ElementEditorModal,
+      componentProps: {
+        mode: 'create',
+        defaultLanguage: this.defaultLanguage,
+      },
+    });
+
+    await modal.present();
+    const res = await modal.onDidDismiss();
+    const el = res.data as FormElement | undefined;
+    if (!el) return;
+
+    const sec = this.sections[this.selectedSectionIndex];
+    const els = [...(sec.elements || []), el];
+    const sections = [...this.sections];
+    sections[this.selectedSectionIndex] = { ...sec, elements: els };
+    this.schema.sections = sections;
+  }
+
+  async editElement(i: number) {
+    if (this.versionStatus !== 'DRAFT') return;
+
+    const sec = this.sections[this.selectedSectionIndex];
+    const current = sec?.elements?.[i];
+    if (!current) return;
+
+    const modal = await this.modalCtrl.create({
+      component: ElementEditorModal,
+      componentProps: {
+        mode: 'edit',
+        defaultLanguage: this.defaultLanguage,
+        element: current,
+      },
+    });
+
+    await modal.present();
+    const res = await modal.onDidDismiss();
+    const updated = res.data as FormElement | undefined;
+    if (!updated) return;
+
+    const els = [...(sec.elements || [])];
+    els[i] = updated;
+    const sections = [...this.sections];
+    sections[this.selectedSectionIndex] = { ...sec, elements: els };
+    this.schema.sections = sections;
+  }
+
+  removeElement(i: number) {
+    if (this.versionStatus !== 'DRAFT') return;
+    const sec = this.sections[this.selectedSectionIndex];
+    const els = [...(sec.elements || [])];
+    els.splice(i, 1);
+    const sections = [...this.sections];
+    sections[this.selectedSectionIndex] = { ...sec, elements: els };
+    this.schema.sections = sections;
+  }
+
+  // ---------------------
+  // Preview + versions list
+  // ---------------------
+
+  async preview() {
+    const modal = await this.modalCtrl.create({
+      component: FormPreviewModal,
+      componentProps: {
+        schema: this.schema,
+        defaultLanguage: this.defaultLanguage,
+      },
+    });
+    await modal.present();
+  }
+
+  async loadVersionFromList(v: any) {
+    const id = Number(v?.id_form_version || v?.id || 0);
+    if (!id) return;
+
+    // Simple strategy: backend doesn't have version-by-id endpoint in this patch.
+    // So re-load latest and keep list only for navigation reference.
+    // If your backend has GET /versions/<id>, you can add it and fetch here.
+    await this.toast('Carregamento de versões antigas ainda não implementado.');
+  }
+
+  private async toast(message: string) {
+    const t = await this.toastCtrl.create({
+      message,
+      duration: 1800,
+      position: 'bottom',
+    });
+    await t.present();
   }
 }

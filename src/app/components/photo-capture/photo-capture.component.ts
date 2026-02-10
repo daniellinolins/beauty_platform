@@ -28,10 +28,15 @@ export class PhotoCaptureComponent {
   @Input() title = 'Capturar foto';
   @Input() hint = 'Tire uma foto nítida.';
 
+  // ✅ Compat p/ uso embutido no renderer (não quebra o uso modal atual)
+  @Input() disabled: boolean = false;
+  @Input() tenantId: number = 1;
+  @Input() value: any = null;
+  @Output() valueChange = new EventEmitter<any>();
+
   @Output() done = new EventEmitter<PhotoCaptureResult>();
   @Output() cancelled = new EventEmitter<void>();
 
-  // precisa ser public pra usar no template
   constructor(
     public platform: Platform,
     @Optional() private modalCtrl?: ModalController
@@ -43,6 +48,8 @@ export class PhotoCaptureComponent {
   errMsg: string | null = null;
 
   async takePhoto() {
+    if (this.disabled) return;
+
     this.errMsg = null;
 
     try {
@@ -66,56 +73,68 @@ export class PhotoCaptureComponent {
       this.mimeType = blob.type || 'image/jpeg';
       this.previewUrl = webPath;
     } catch (e: any) {
-      // usuário pode cancelar a câmera
-      if (String(e?.message || e).toLowerCase().includes('cancel')) {
-        return;
-      }
-      this.errMsg = e?.message || 'Erro ao abrir a câmera.';
+      if (String(e?.message || e).toLowerCase().includes('cancel')) return;
+      this.errMsg = 'Erro ao capturar foto.';
+      console.error(e);
     }
   }
 
-  async onFilePicked(ev: Event) {
-    this.errMsg = null;
+  async onFilePicked(ev: any) {
+    if (this.disabled) return;
 
-    const input = ev.target as HTMLInputElement;
-    const file = input.files?.[0];
+    this.errMsg = null;
+    const file: File | null = ev?.target?.files?.[0] || null;
     if (!file) return;
 
     this.blob = file;
     this.mimeType = file.type || 'image/jpeg';
-
-    // preview no browser
     this.previewUrl = URL.createObjectURL(file);
   }
 
   clear() {
+    if (this.disabled) return;
+
     this.errMsg = null;
     this.blob = null;
-    if (this.previewUrl?.startsWith('blob:')) {
-      URL.revokeObjectURL(this.previewUrl);
+
+    if (this.previewUrl && this.previewUrl.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(this.previewUrl);
+      } catch {}
     }
     this.previewUrl = null;
+
+    // compat renderer
+    this.value = null;
+    this.valueChange.emit(null);
   }
 
-  cancel() {
-    this.clear();
-    this.cancelled.emit();
-    this.modalCtrl?.dismiss(null, 'cancel');
-  }
+  async save() {
+    if (this.disabled) return;
 
-  save() {
     if (!this.blob) {
-      this.errMsg = 'Nenhuma foto selecionada.';
+      this.errMsg = 'Nenhuma imagem selecionada.';
       return;
     }
 
-    const result: PhotoCaptureResult = {
-      ok: true,
-      blob: this.blob,
-      mime_type: this.mimeType || 'image/jpeg',
-    };
+    const result: PhotoCaptureResult = { ok: true, blob: this.blob, mime_type: this.mimeType };
+
+    // ✅ compat renderer: emite também valueChange
+    this.value = result;
+    this.valueChange.emit(result);
 
     this.done.emit(result);
-    this.modalCtrl?.dismiss(result, 'ok');
+
+    if (this.modalCtrl) {
+      await this.modalCtrl.dismiss(result, 'done');
+    }
+  }
+
+  async cancel() {
+    this.cancelled.emit();
+
+    if (this.modalCtrl) {
+      await this.modalCtrl.dismiss(null, 'cancel');
+    }
   }
 }

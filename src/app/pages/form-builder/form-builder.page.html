@@ -27,7 +27,7 @@
 
   <ion-spinner *ngIf="loading"></ion-spinner>
 
-  <ion-segment *ngIf="!loading" [value]="tab" (ionChange)="setTab($event.detail.value)">
+  <ion-segment *ngIf="!loading" [value]="tab" (ionChange)="setTab($event.detail.value || 'meta')">
     <ion-segment-button value="meta"><ion-label>Metadados</ion-label></ion-segment-button>
     <ion-segment-button value="structure" [disabled]="isNew"><ion-label>Estrutura</ion-label></ion-segment-button>
     <ion-segment-button value="versions" [disabled]="isNew"><ion-label>Versões</ion-label></ion-segment-button>
@@ -38,17 +38,17 @@
     <ion-list>
       <ion-item>
         <ion-label position="stacked">Nome</ion-label>
-        <ion-input [value]="formName" (ionInput)="setFormName($event.detail.value)"></ion-input>
+        <ion-input [value]="formName" (ionInput)="setFormName($event.detail.value ?? '')"></ion-input>
       </ion-item>
 
       <ion-item>
         <ion-label position="stacked">Descrição</ion-label>
-        <ion-textarea autoGrow="true" [value]="formDescription" (ionInput)="setFormDescription($event.detail.value)"></ion-textarea>
+        <ion-textarea autoGrow="true" [value]="formDescription" (ionInput)="setFormDescription($event.detail.value ?? '')"></ion-textarea>
       </ion-item>
 
       <ion-item>
         <ion-label position="stacked">Status</ion-label>
-        <ion-select [value]="formStatus" (ionChange)="setFormStatus($event.detail.value)">
+        <ion-select [value]="formStatus" (ionChange)="setFormStatus($event.detail.value ?? 'ACTIVE')">
           <ion-select-option value="ACTIVE">ACTIVE</ion-select-option>
           <ion-select-option value="INACTIVE">INACTIVE</ion-select-option>
         </ion-select>
@@ -56,7 +56,7 @@
 
       <ion-item>
         <ion-label position="stacked">Idioma padrão</ion-label>
-        <ion-select [value]="defaultLanguage" (ionChange)="setDefaultLanguage($event.detail.value)">
+        <ion-select [value]="defaultLanguage" (ionChange)="setDefaultLanguage($event.detail.value ?? 'pt')">
           <ion-select-option value="pt-PT">pt-PT</ion-select-option>
           <ion-select-option value="pt-BR">pt-BR</ion-select-option>
           <ion-select-option value="en-US">en-US</ion-select-option>

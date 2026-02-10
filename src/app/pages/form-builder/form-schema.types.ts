@@ -18,7 +18,7 @@ export function makeEmptySchema(defaultLanguage: string): FormSchema {
     default_language: defaultLanguage,
     sections: [
       {
-        id: 'section-1',
+        id: `sec_${Date.now()}`,
         title: { [defaultLanguage]: 'Seção 1' },
         elements: [],
       },

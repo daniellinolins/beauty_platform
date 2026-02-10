@@ -1,46 +1,35 @@
 <ion-header [translucent]="true">
   <ion-toolbar>
-    <ion-title>form-list</ion-title>
+    <ion-title>Forms</ion-title>
   </ion-toolbar>
 </ion-header>
 
 <ion-content [fullscreen]="true">
-  <ion-header collapse="condense">
-    <ion-toolbar>
-      <ion-title size="large">form-list</ion-title>
-    </ion-toolbar>
-  </ion-header>
-</ion-content>
-<ion-header>
-  <ion-toolbar>
-    <ion-title>Formulários</ion-title>
-  </ion-toolbar>
-</ion-header>
-
-<ion-content class="ion-padding">
-
-  <ion-refresher slot="fixed" (ionRefresh)="load($event)">
-    <ion-refresher-content></ion-refresher-content>
-  </ion-refresher>
-
-  <ion-text color="danger" *ngIf="errorMsg">
-    <p>{{ errorMsg }}</p>
-  </ion-text>
-
-  <ion-list *ngIf="forms.length > 0">
-    <ion-item button *ngFor="let f of forms" (click)="openForm(f.id_form)">
+  <ion-list>
+    <ion-item
+      button
+      *ngFor="let form of forms"
+      (click)="openForm(form)"
+    >
       <ion-label>
-        <h2>{{ f.name }}</h2>
-        <p>{{ f.description }}</p>
+        <h2>{{ form.name }}</h2>
+        <p>{{ form.description }}</p>
       </ion-label>
-      <ion-badge slot="end">{{ f.status }} - {{ f.id_form }}</ion-badge>
+
+      <ion-buttons slot="end">
+        <ion-button fill="clear" (click)="editForm(form); $event.stopPropagation()">
+          <ion-icon name="create-outline"></ion-icon>
+        </ion-button>
+        <ion-button fill="clear" (click)="openForm(form); $event.stopPropagation()">
+          <ion-icon name="play-outline"></ion-icon>
+        </ion-button>
+      </ion-buttons>
     </ion-item>
   </ion-list>
 
-  <ion-text *ngIf="!loading && forms.length === 0 && !errorMsg">
-    <p>Nenhum formulário ativo encontrado para este tenant.</p>
-  </ion-text>
-
-  <ion-spinner *ngIf="loading"></ion-spinner>
-
+  <ion-fab slot="fixed" vertical="bottom" horizontal="end">
+    <ion-fab-button (click)="newForm()">
+      <ion-icon name="add"></ion-icon>
+    </ion-fab-button>
+  </ion-fab>
 </ion-content>

@@ -8,16 +8,34 @@ def _cfg(key: str, default=None):
     return current_app.config.get(key, os.getenv(key, default))
 
 
+def _normalize_params(params):
+    """
+    Accepts params as:
+      - None
+      - tuple/list
+      - dict
+      - any other DBAPI-compatible object
+    and returns something safe for cursor.execute().
+    """
+    if params is None:
+        return ()
+    if isinstance(params, (tuple, list)):
+        return tuple(params)
+    if isinstance(params, dict):
+        return params
+    return params
+
+
 def get_conn():
-    conn = getattr(g, '_db_conn', None)
+    conn = getattr(g, "_db_conn", None)
     if conn is None:
         conn = pymysql.connect(
-            host=_cfg('DB_HOST', 'localhost'),
-            user=_cfg('DB_USER', 'root'),
-            password=_cfg('DB_PASSWORD', ''),
-            database=_cfg('DB_NAME', _cfg('DB_DATABASE', 'beauty_platform')),
-            port=int(_cfg('DB_PORT', 3306)),
-            charset='utf8mb4',
+            host=_cfg("DB_HOST", "localhost"),
+            user=_cfg("DB_USER", "root"),
+            password=_cfg("DB_PASSWORD", ""),
+            database=_cfg("DB_NAME", _cfg("DB_DATABASE", "beauty_platform")),
+            port=int(_cfg("DB_PORT", 3306)),
+            charset="utf8mb4",
             cursorclass=pymysql.cursors.DictCursor,
             autocommit=True,
         )
@@ -26,7 +44,7 @@ def get_conn():
 
 
 def close_conn(_exc=None):
-    conn = getattr(g, '_db_conn', None)
+    conn = getattr(g, "_db_conn", None)
     if conn is not None:
         try:
             conn.close()
@@ -37,28 +55,32 @@ def close_conn(_exc=None):
 def fetch_all(sql: str, params=None):
     conn = get_conn()
     with conn.cursor() as cur:
-        cur.execute(sql, params or ())
+        cur.execute(sql, _normalize_params(params))
         return cur.fetchall()
 
 
 def fetch_one(sql: str, params=None):
     conn = get_conn()
     with conn.cursor() as cur:
-        cur.execute(sql, params or ())
+        cur.execute(sql, _normalize_params(params))
         return cur.fetchone()
 
 
 def execute(sql: str, params=None):
     conn = get_conn()
     with conn.cursor() as cur:
-        cur.execute(sql, params or ())
+        cur.execute(sql, _normalize_params(params))
         return cur.lastrowid
 
 
-def execute_no_return(sql: str, params=None):
+def execute_no_return(sql: str, params=None, return_lastrowid: bool = False):
     conn = get_conn()
     with conn.cursor() as cur:
-        cur.execute(sql, params or ())
+        cur.execute(sql, _normalize_params(params))
+        conn.commit()
+        if return_lastrowid:
+            return cur.lastrowid
+    return None
 
 
 # Backwards-compatible aliases (some files were importing these names)

@@ -3,6 +3,19 @@ from db import fetch_all, fetch_one, execute, execute_no_return
 
 bp_forms = Blueprint('forms', __name__, url_prefix='/api/forms')
 
+import re
+from datetime import datetime
+
+def _slug_code(name: str) -> str:
+    base = (name or "").strip().lower()
+    base = re.sub(r"[^a-z0-9]+", "-", base)
+    base = re.sub(r"-+", "-", base).strip("-")
+    if not base:
+        base = "form"
+    # sufixo curto para evitar colisão
+    suffix = datetime.utcnow().strftime("%y%m%d%H%M%S")
+    code = f"{base}-{suffix}"
+    return code[:60]  # respeita varchar(60)
 
 def _slugify(value: str) -> str:
     import re, unicodedata
@@ -61,46 +74,41 @@ def list_forms():
 
 
 @bp_forms.post('')
+#@bp.route("/api/forms", methods=["POST"])
 def create_form():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(force=True) or {}
 
-    tenant_id = data.get('tenant_id')
-    name = data.get('name')
-    if not tenant_id or not name:
-        return jsonify({'error': 'tenant_id and name are required'}), 400
+    tenant_id = data.get("tenant_id")
+    name = (data.get("name") or "").strip()
+    description = data.get("description")
+    status = data.get("status") or "ACTIVE"
+    default_language = data.get("default_language") or "pt-PT"
 
-    description = data.get('description')
-
-    status = (data.get('status') or 'ACTIVE').upper()
-    if status not in ('ACTIVE', 'INACTIVE'):
-        status = 'ACTIVE'
-
-    default_language = _normalize_language(data.get('default_language', 'pt'))
-
-    code = (data.get('code') or '').strip()
+    # gera code se não vier
+    code = (data.get("code") or "").strip()
     if not code:
-        code = _generate_unique_code(int(tenant_id), str(name))
-    else:
-        # normaliza e garante unicidade do code informado
-        code = _generate_unique_code(int(tenant_id), code)
+        code = _slug_code(name)
 
-    new_id = execute(
-        """
-        INSERT INTO form (tenant_id, name, description, status, default_language, code)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        """,
-        (tenant_id, name, description, status, default_language, code),
+    sql = """
+        INSERT INTO form (tenant_id, code, name, description, status, default_language)
+        VALUES (%(tenant_id)s, %(code)s, %(name)s, %(description)s, %(status)s, %(default_language)s)
+    """
+
+    new_id = execute_no_return(
+        sql,
+        {
+            "tenant_id": tenant_id,
+            "code": code,
+            "name": name,
+            "description": description,
+            "status": status,
+            "default_language": default_language,
+        },
+        return_lastrowid=True,
     )
 
-    row = fetch_one(
-        """
-        SELECT id_form, tenant_id, name, description, status, default_language, code
-        FROM form
-        WHERE id_form=%s
-        """,
-        (new_id,),
-    )
-    return jsonify(row), 201
+    return jsonify({"id_form": new_id, "tenant_id": tenant_id, "code": code}), 201
+
 
 
 @bp_forms.put('/<int:form_id>')

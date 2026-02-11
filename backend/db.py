@@ -73,14 +73,13 @@ def execute(sql: str, params=None):
         return cur.lastrowid
 
 
-def execute_no_return(sql: str, params=None, return_lastrowid: bool = False):
+def execute_no_return(sql: str, params: dict | None = None, return_lastrowid: bool = False):
     conn = get_conn()
     with conn.cursor() as cur:
         cur.execute(sql, _normalize_params(params))
         conn.commit()
-        if return_lastrowid:
-            return cur.lastrowid
-    return None
+        return cur.lastrowid if return_lastrowid else None
+
 
 
 # Backwards-compatible aliases (some files were importing these names)

@@ -1,159 +1,298 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, request, jsonify
+from db import fetch_all, fetch_one, execute
 import json
-from db import fetch_all, fetch_one, execute_no_return
+from datetime import datetime
 
-bp_form_versions = Blueprint('form_versions', __name__, url_prefix='/api/forms')
-
-
-def _schema_to_db(schema_json):
-    # Store as JSON string (MySQL JSON field also accepts string)
-    if schema_json is None:
-        return json.dumps({})
-    if isinstance(schema_json, (dict, list)):
-        return json.dumps(schema_json, ensure_ascii=False)
-    # assume string
-    return str(schema_json)
+bp_forms_versions = Blueprint("bp_forms_versions", __name__, url_prefix="/api/forms")
 
 
-@bp_form_versions.get('/<int:form_id>/versions')
-def list_versions(form_id: int):
-    tenant_id = request.args.get('tenant_id', type=int)
+def _as_int(v, default=None):
+    try:
+        return int(v)
+    except Exception:
+        return default
+
+
+def _json_dumps_if_needed(value):
+    # schema_json no DB é JSON (longtext com json_valid). Aceita dict/list ou string json.
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False)
+
+
+@bp_forms_versions.get("/<int:id_form>/versions")
+def list_versions(id_form: int):
+    tenant_id = _as_int(request.args.get("tenant_id"))
     if not tenant_id:
-        return jsonify({'error': 'tenant_id is required'}), 400
+        return jsonify({"error": "tenant_id is required"}), 400
 
     rows = fetch_all(
         """
         SELECT
-            id_form_version,
-            id_form,
-            tenant_id,
-            version_number,
-            version_status,
-            schema_json,
-            created_at
+          id_form_version,
+          tenant_id,
+          id_form,
+          version_number,
+          status,
+          schema_json,
+          publish_at,
+          published_by,
+          checksum_sha256,
+          created_at,
+          created_by,
+          updated_at,
+          updated_by
         FROM form_version
-        WHERE id_form = %s AND tenant_id = %s
-        ORDER BY id_form_version DESC
+        WHERE tenant_id = %(tenant_id)s
+          AND id_form = %(id_form)s
+          AND deleted_at IS NULL
+        ORDER BY version_number DESC
         """,
-        (form_id, tenant_id),
+        {"tenant_id": tenant_id, "id_form": id_form},
     )
     return jsonify(rows)
 
 
-@bp_form_versions.get('/<int:form_id>/versions/latest')
-def get_latest_version(form_id: int):
-    tenant_id = request.args.get('tenant_id', type=int)
+@bp_forms_versions.get("/<int:id_form>/versions/<int:id_form_version>")
+def get_version(id_form: int, id_form_version: int):
+    tenant_id = _as_int(request.args.get("tenant_id"))
     if not tenant_id:
-        return jsonify({'error': 'tenant_id is required'}), 400
+        return jsonify({"error": "tenant_id is required"}), 400
 
     row = fetch_one(
         """
         SELECT
-            id_form_version,
-            id_form,
-            tenant_id,
-            version_number,
-            version_status,
-            schema_json,
-            created_at
+          id_form_version,
+          tenant_id,
+          id_form,
+          version_number,
+          status,
+          schema_json,
+          publish_at,
+          published_by,
+          checksum_sha256,
+          created_at,
+          created_by,
+          updated_at,
+          updated_by
         FROM form_version
-        WHERE id_form = %s AND tenant_id = %s
-        ORDER BY id_form_version DESC
-        LIMIT 1
+        WHERE tenant_id = %(tenant_id)s
+          AND id_form = %(id_form)s
+          AND id_form_version = %(id_form_version)s
+          AND deleted_at IS NULL
         """,
-        (form_id, tenant_id),
+        {"tenant_id": tenant_id, "id_form": id_form, "id_form_version": id_form_version},
     )
+
     if not row:
-        return jsonify({}), 404
+        return jsonify({"error": "Version not found"}), 404
+
     return jsonify(row)
 
 
-@bp_form_versions.post('/<int:form_id>/versions')
-def create_version(form_id: int):
+@bp_forms_versions.post("/<int:id_form>/versions")
+def create_version(id_form: int):
     data = request.get_json(silent=True) or {}
-    tenant_id = data.get('tenant_id') or request.args.get('tenant_id', type=int)
+    tenant_id = _as_int(data.get("tenant_id"))
     if not tenant_id:
-        return jsonify({'error': 'tenant_id is required'}), 400
+        return jsonify({"error": "tenant_id is required"}), 400
 
-    version_status = data.get('version_status', 'DRAFT')
-    schema_json = _schema_to_db(data.get('schema_json'))
+    schema_json = _json_dumps_if_needed(data.get("schema_json"))
+    if not schema_json:
+        return jsonify({"error": "schema_json is required"}), 400
 
-    # next version_number = max + 1 (simpler)
+    status = (data.get("status") or "DRAFT").upper()
+    if status not in ("DRAFT", "PUBLISHED", "ARCHIVED"):
+        status = "DRAFT"
+
+    # próximo version_number
     last = fetch_one(
-        "SELECT COALESCE(MAX(version_number), 0) AS mx FROM form_version WHERE id_form=%s AND tenant_id=%s",
-        (form_id, tenant_id),
-    )
-    next_number = (last.get('mx') if last else 0) + 1
-
-    new_id = execute_no_return(
         """
-        INSERT INTO form_version (id_form, tenant_id, version_number, version_status, schema_json)
-        VALUES (%s, %s, %s, %s, %s)
+        SELECT MAX(version_number) AS max_version
+        FROM form_version
+        WHERE tenant_id = %(tenant_id)s
+          AND id_form = %(id_form)s
+          AND deleted_at IS NULL
         """,
-        (form_id, tenant_id, next_number, version_status, schema_json),
-        return_lastrowid=True,
+        {"tenant_id": tenant_id, "id_form": id_form},
+    )
+    next_version = (last.get("max_version") or 0) + 1 if last else 1
+
+    new_id = execute(
+        """
+        INSERT INTO form_version
+          (tenant_id, id_form, version_number, status, schema_json, created_at)
+        VALUES
+          (%(tenant_id)s, %(id_form)s, %(version_number)s, %(status)s, %(schema_json)s, NOW())
+        """,
+        {
+            "tenant_id": tenant_id,
+            "id_form": id_form,
+            "version_number": next_version,
+            "status": status,              # ✅ coluna correta
+            "schema_json": schema_json,
+        },
     )
 
-    row = fetch_one(
-        """SELECT id_form_version, id_form, tenant_id, version_number, version_status, schema_json, created_at
-            FROM form_version WHERE id_form_version=%s""",
-        (new_id,),
+    created = fetch_one(
+        """
+        SELECT
+          id_form_version,
+          tenant_id,
+          id_form,
+          version_number,
+          status,
+          schema_json,
+          publish_at,
+          published_by,
+          checksum_sha256,
+          created_at,
+          created_by,
+          updated_at,
+          updated_by
+        FROM form_version
+        WHERE id_form_version = %(id_form_version)s
+        """,
+        {"id_form_version": new_id},
     )
-    return jsonify(row), 201
+
+    return jsonify(created), 201
 
 
-@bp_form_versions.put('/<int:form_id>/versions/<int:version_id>')
-def update_version(form_id: int, version_id: int):
+@bp_forms_versions.put("/<int:id_form>/versions/<int:id_form_version>")
+def update_version(id_form: int, id_form_version: int):
     data = request.get_json(silent=True) or {}
-    tenant_id = data.get('tenant_id') or request.args.get('tenant_id', type=int)
+    tenant_id = _as_int(data.get("tenant_id"))
     if not tenant_id:
-        return jsonify({'error': 'tenant_id is required'}), 400
+        return jsonify({"error": "tenant_id is required"}), 400
 
-    fields = {}
-    if 'version_status' in data:
-        fields['version_status'] = data.get('version_status')
-    if 'schema_json' in data:
-        fields['schema_json'] = _schema_to_db(data.get('schema_json'))
+    existing = fetch_one(
+        """
+        SELECT id_form_version, status
+        FROM form_version
+        WHERE tenant_id = %(tenant_id)s
+          AND id_form = %(id_form)s
+          AND id_form_version = %(id_form_version)s
+          AND deleted_at IS NULL
+        """,
+        {"tenant_id": tenant_id, "id_form": id_form, "id_form_version": id_form_version},
+    )
+    if not existing:
+        return jsonify({"error": "Version not found"}), 404
 
-    if not fields:
-        return jsonify({'error': 'no fields to update'}), 400
+    # regra simples: só edita schema se estiver DRAFT
+    if (existing.get("status") or "").upper() != "DRAFT":
+        return jsonify({"error": "Only DRAFT versions can be updated"}), 409
 
-    sets = ', '.join([f"{k}=%s" for k in fields.keys()])
-    params = list(fields.values()) + [form_id, version_id, tenant_id]
+    schema_json = _json_dumps_if_needed(data.get("schema_json"))
+    if not schema_json:
+        return jsonify({"error": "schema_json is required"}), 400
 
-    execute_no_return(
-        f"UPDATE form_version SET {sets} WHERE id_form=%s AND id_form_version=%s AND tenant_id=%s",
-        tuple(params),
+    execute(
+        """
+        UPDATE form_version
+        SET schema_json = %(schema_json)s,
+            updated_at = NOW()
+        WHERE tenant_id = %(tenant_id)s
+          AND id_form = %(id_form)s
+          AND id_form_version = %(id_form_version)s
+        """,
+        {
+            "schema_json": schema_json,
+            "tenant_id": tenant_id,
+            "id_form": id_form,
+            "id_form_version": id_form_version,
+        },
     )
 
     row = fetch_one(
-        """SELECT id_form_version, id_form, tenant_id, version_number, version_status, schema_json, created_at
-            FROM form_version WHERE id_form=%s AND id_form_version=%s AND tenant_id=%s""",
-        (form_id, version_id, tenant_id),
+        """
+        SELECT
+          id_form_version,
+          tenant_id,
+          id_form,
+          version_number,
+          status,
+          schema_json,
+          publish_at,
+          published_by,
+          checksum_sha256,
+          created_at,
+          created_by,
+          updated_at,
+          updated_by
+        FROM form_version
+        WHERE tenant_id = %(tenant_id)s
+          AND id_form = %(id_form)s
+          AND id_form_version = %(id_form_version)s
+        """,
+        {"tenant_id": tenant_id, "id_form": id_form, "id_form_version": id_form_version},
     )
-    if not row:
-        return jsonify({'error': 'not found'}), 404
     return jsonify(row)
 
 
-@bp_form_versions.post('/<int:form_id>/versions/<int:version_id>/publish')
-def publish_version(form_id: int, version_id: int):
+@bp_forms_versions.post("/<int:id_form>/versions/<int:id_form_version>/publish")
+def publish_version(id_form: int, id_form_version: int):
     data = request.get_json(silent=True) or {}
-    tenant_id = data.get('tenant_id') or request.args.get('tenant_id', type=int)
+    tenant_id = _as_int(data.get("tenant_id"))
     if not tenant_id:
-        return jsonify({'error': 'tenant_id is required'}), 400
+        return jsonify({"error": "tenant_id is required"}), 400
 
-    execute_no_return(
-        "UPDATE form_version SET version_status='PUBLISHED' WHERE id_form=%s AND id_form_version=%s AND tenant_id=%s",
-        (form_id, version_id, tenant_id),
+    existing = fetch_one(
+        """
+        SELECT id_form_version, status
+        FROM form_version
+        WHERE tenant_id = %(tenant_id)s
+          AND id_form = %(id_form)s
+          AND id_form_version = %(id_form_version)s
+          AND deleted_at IS NULL
+        """,
+        {"tenant_id": tenant_id, "id_form": id_form, "id_form_version": id_form_version},
+    )
+    if not existing:
+        return jsonify({"error": "Version not found"}), 404
+
+    if (existing.get("status") or "").upper() != "DRAFT":
+        return jsonify({"error": "Only DRAFT versions can be published"}), 409
+
+    execute(
+        """
+        UPDATE form_version
+        SET status = 'PUBLISHED',
+            publish_at = NOW(),
+            updated_at = NOW()
+        WHERE tenant_id = %(tenant_id)s
+          AND id_form = %(id_form)s
+          AND id_form_version = %(id_form_version)s
+        """,
+        {"tenant_id": tenant_id, "id_form": id_form, "id_form_version": id_form_version},
     )
 
     row = fetch_one(
-        """SELECT id_form_version, id_form, tenant_id, version_number, version_status, schema_json, created_at
-            FROM form_version WHERE id_form=%s AND id_form_version=%s AND tenant_id=%s""",
-        (form_id, version_id, tenant_id),
+        """
+        SELECT
+          id_form_version,
+          tenant_id,
+          id_form,
+          version_number,
+          status,
+          schema_json,
+          publish_at,
+          published_by,
+          checksum_sha256,
+          created_at,
+          created_by,
+          updated_at,
+          updated_by
+        FROM form_version
+        WHERE tenant_id = %(tenant_id)s
+          AND id_form = %(id_form)s
+          AND id_form_version = %(id_form_version)s
+        """,
+        {"tenant_id": tenant_id, "id_form": id_form, "id_form_version": id_form_version},
     )
-    if not row:
-        return jsonify({'error': 'not found'}), 404
-
     return jsonify(row)

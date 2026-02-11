@@ -81,6 +81,12 @@ export class ApiService {
     });
   }
 
+  getFormVersion(formId: number, versionId: number, tenantId: number): Observable<any> {
+    return this.http.get(`${this.baseUrl}/forms/${formId}/versions/${versionId}`, {
+      params: { tenant_id: tenantId },
+    });
+  }  
+
   publishFormVersion(req: {
     tenant_id: number;
     id_form: number;

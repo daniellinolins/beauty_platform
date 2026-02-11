@@ -27,7 +27,7 @@
 
   <ion-spinner *ngIf="loading"></ion-spinner>
 
-  <ion-segment *ngIf="!loading" [value]="tab" (ionChange)="setTab($event.detail.value || 'meta')">
+  <ion-segment *ngIf="!loading" [value]="tab" (ionChange)="setTab(($event.detail.value || 'meta').toString())">
     <ion-segment-button value="meta"><ion-label>Metadados</ion-label></ion-segment-button>
     <ion-segment-button value="structure" [disabled]="isNew"><ion-label>Estrutura</ion-label></ion-segment-button>
     <ion-segment-button value="versions" [disabled]="isNew"><ion-label>Versões</ion-label></ion-segment-button>

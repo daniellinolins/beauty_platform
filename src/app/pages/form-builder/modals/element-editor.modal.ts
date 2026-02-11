@@ -1,254 +1,227 @@
 import { CommonModule } from '@angular/common';
 import { Component, Input, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { IonicModule, ModalController } from '@ionic/angular';
+import {
+  IonHeader,
+  IonToolbar,
+  IonTitle,
+  IonContent,
+  IonButtons,
+  IonButton,
+  IonItem,
+  IonLabel,
+  IonInput,
+  IonSelect,
+  IonSelectOption,
+  IonList,
+  IonGrid,
+  IonRow,
+  IonCol,
+  IonIcon,
+  IonToggle,
+} from '@ionic/angular/standalone';
+import { ModalController } from '@ionic/angular';
 
 import {
   FormElement,
   FieldElement,
-  FieldOption,
+  StaticElement,
   InputType,
   LocalizedText,
+  FieldOption,
+  FieldRules,
 } from 'src/app/components/form-renderer/form-renderer.types';
 
-type Mode = 'create' | 'edit';
+type StaticType = StaticElement['type'];
 
 @Component({
   selector: 'app-element-editor-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule, IonicModule],
+  imports: [
+    CommonModule,
+    FormsModule,
+
+    IonHeader,
+    IonToolbar,
+    IonTitle,
+    IonContent,
+    IonButtons,
+    IonButton,
+    IonItem,
+    IonLabel,
+    IonInput,
+    IonSelect,
+    IonSelectOption,
+    IonList,
+    IonGrid,
+    IonRow,
+    IonCol,
+    IonIcon,
+    IonToggle,
+  ],
   template: `
     <ion-header>
       <ion-toolbar>
-        <ion-title>{{ mode === 'edit' ? 'Editar elemento' : 'Novo elemento' }}</ion-title>
+        <ion-title>{{ isEdit ? 'Editar elemento' : 'Novo elemento' }}</ion-title>
         <ion-buttons slot="end">
-          <ion-button fill="clear" (click)="cancel()">Cancelar</ion-button>
+          <ion-button (click)="close()">Cancelar</ion-button>
+          <ion-button strong (click)="confirm()">OK</ion-button>
         </ion-buttons>
       </ion-toolbar>
     </ion-header>
 
     <ion-content class="ion-padding">
-      <ion-list>
+
+      <ion-item>
+        <ion-label position="stacked">Tipo</ion-label>
+        <ion-select [(ngModel)]="mode" (ionChange)="onModeChange()">
+          <ion-select-option value="FIELD">Campo (FIELD)</ion-select-option>
+          <ion-select-option value="STATIC">Estático (TITLE/SUBTITLE/TEXT_BLOCK/DIVIDER/IMAGE)</ion-select-option>
+        </ion-select>
+      </ion-item>
+
+      <!-- ========================= FIELD ========================= -->
+      <ng-container *ngIf="mode === 'FIELD'">
+
         <ion-item>
-          <ion-label>Tipo</ion-label>
-          <ion-select
-            interface="popover"
-            [disabled]="mode === 'edit'"
-            [value]="type"
-            (ionChange)="onTypeChange($event.detail.value)"
-          >
-            <ion-select-option value="FIELD">Campo (FIELD)</ion-select-option>
-            <ion-select-option value="TITLE">Título</ion-select-option>
-            <ion-select-option value="SUBTITLE">Subtítulo</ion-select-option>
-            <ion-select-option value="TEXT_BLOCK">Texto</ion-select-option>
-            <ion-select-option value="DIVIDER">Divisor</ion-select-option>
-            <ion-select-option value="IMAGE_DECORATIVE">Imagem decorativa</ion-select-option>
+          <ion-label position="stacked">Key</ion-label>
+          <ion-input [(ngModel)]="field.key" placeholder="ex: customer_level"></ion-input>
+        </ion-item>
+
+        <ion-item>
+          <ion-label position="stacked">Input Type</ion-label>
+          <ion-select [(ngModel)]="field.input_type" (ionChange)="onFieldTypeChange()">
+            <ion-select-option *ngFor="let it of inputTypeOptions" [value]="it">{{ it }}</ion-select-option>
           </ion-select>
         </ion-item>
 
-        <!-- ===================== FIELD ===================== -->
-        <ng-container *ngIf="type === 'FIELD'">
-          <ion-item>
-            <ion-label position="stacked">Key</ion-label>
-            <ion-input
-              [value]="fieldKey"
-              (ionInput)="fieldKey = ($event.detail.value ?? '').toString()"
-              placeholder="ex: customer_name"
-            ></ion-input>
+        <ion-item>
+          <ion-label position="stacked">Label (pt)</ion-label>
+          <ion-input [(ngModel)]="labelPt" placeholder="Ex: Nível do cliente"></ion-input>
+        </ion-item>
+
+        <ion-item>
+          <ion-label position="stacked">Label (en)</ion-label>
+          <ion-input [(ngModel)]="labelEn" placeholder="Ex: Customer level"></ion-input>
+        </ion-item>
+
+        <ion-item>
+          <ion-label position="stacked">Placeholder (pt)</ion-label>
+          <ion-input [(ngModel)]="phPt" placeholder="Ex: Selecione..."></ion-input>
+        </ion-item>
+
+        <ion-item>
+          <ion-label position="stacked">Placeholder (en)</ion-label>
+          <ion-input [(ngModel)]="phEn" placeholder="Ex: Select..."></ion-input>
+        </ion-item>
+
+        <ion-item lines="full">
+          <ion-label>Obrigatório</ion-label>
+          <ion-toggle [(ngModel)]="required"></ion-toggle>
+        </ion-item>
+
+        <!-- OPTIONS (SELECT / SINGLE_CHOICE / MULTI_CHOICE) -->
+        <ng-container *ngIf="needsOptions(field.input_type)">
+
+          <ion-item lines="none">
+            <ion-label>
+              <h2>Opções</h2>
+              <p style="white-space: normal;">
+                Para {{ field.input_type }}, defina a lista de opções (value + labels).
+              </p>
+            </ion-label>
           </ion-item>
 
-          <ion-item>
-            <ion-label position="stacked">Input Type</ion-label>
-            <ion-select
-              interface="popover"
-              [value]="fieldInputType"
-              (ionChange)="onInputTypeChange($event.detail.value)"
-            >
-              <ion-select-option *ngFor="let it of inputTypeOptions" [value]="it">
-                {{ it }}
-              </ion-select-option>
-            </ion-select>
-          </ion-item>
+          <ion-list>
+            <ion-item *ngFor="let opt of options; let i = index">
+              <ion-grid style="width:100%;">
+                <ion-row>
+                  <ion-col size="12">
+                    <ion-label position="stacked">Value</ion-label>
+                    <!-- ✅ ngModel evita o “1 caractere” -->
+                    <ion-input [(ngModel)]="options[i].value" placeholder="ex: GOLD"></ion-input>
+                  </ion-col>
 
-          <ion-item>
-            <ion-label position="stacked">Label (pt)</ion-label>
-            <ion-input
-              [value]="labelPt"
-              (ionInput)="labelPt = ($event.detail.value ?? '').toString()"
-              placeholder="Ex: Nome"
-            ></ion-input>
-          </ion-item>
+                  <ion-col size="6">
+                    <ion-label position="stacked">Label (pt)</ion-label>
+                    <ion-input [(ngModel)]="optLabelPt[i]" placeholder="Ex: Ouro"></ion-input>
+                  </ion-col>
 
-          <ion-item>
-            <ion-label position="stacked">Label (en)</ion-label>
-            <ion-input
-              [value]="labelEn"
-              (ionInput)="labelEn = ($event.detail.value ?? '').toString()"
-              placeholder="Ex: Name"
-            ></ion-input>
-          </ion-item>
+                  <ion-col size="6">
+                    <ion-label position="stacked">Label (en)</ion-label>
+                    <ion-input [(ngModel)]="optLabelEn[i]" placeholder="Ex: Gold"></ion-input>
+                  </ion-col>
 
-          <ion-item>
-            <ion-label position="stacked">Placeholder (pt)</ion-label>
-            <ion-input
-              [value]="placeholderPt"
-              (ionInput)="placeholderPt = ($event.detail.value ?? '').toString()"
-              placeholder="Ex: Digite seu nome"
-            ></ion-input>
-          </ion-item>
-
-          <ion-item>
-            <ion-label position="stacked">Placeholder (en)</ion-label>
-            <ion-input
-              [value]="placeholderEn"
-              (ionInput)="placeholderEn = ($event.detail.value ?? '').toString()"
-              placeholder="Ex: Type your name"
-            ></ion-input>
-          </ion-item>
-
-          <ion-item lines="full">
-            <ion-label>Obrigatório</ion-label>
-            <ion-toggle
-              slot="end"
-              [checked]="required"
-              (ionChange)="required = !!$event.detail.checked"
-            ></ion-toggle>
-          </ion-item>
-
-          <!-- OPTIONS only for SELECT / SINGLE_CHOICE / MULTI_CHOICE -->
-          <ng-container *ngIf="needsOptions(fieldInputType)">
-            <ion-item lines="none">
-              <ion-label>
-                <h2>Opções</h2>
-                <p style="white-space: normal;">
-                  Para {{ fieldInputType }}, defina a lista de opções (value + labels).
-                </p>
-              </ion-label>
+                  <ion-col size="12" style="text-align:right;">
+                    <ion-button fill="clear" color="danger" (click)="removeOption(i)">Remover opção</ion-button>
+                  </ion-col>
+                </ion-row>
+              </ion-grid>
             </ion-item>
+          </ion-list>
 
-            <ion-list>
-              <ion-item *ngFor="let opt of options; let i = index">
-                <ion-grid style="width:100%;">
-                  <ion-row>
-                    <ion-col size="12">
-                      <ion-label position="stacked">Value</ion-label>
-                      <ion-input
-                        [value]="opt.value"
-                        (ionInput)="setOptionValue(i, ($event.detail.value ?? '').toString())"
-                        placeholder="ex: GOLD"
-                      ></ion-input>
-                    </ion-col>
+          <ion-button expand="block" fill="outline" (click)="addOption()">
+            + Adicionar opção
+          </ion-button>
 
-                    <ion-col size="6">
-                      <ion-label position="stacked">Label (pt)</ion-label>
-                      <ion-input
-                        [value]="getOptLabel(opt, 'pt')"
-                        (ionInput)="setOptionLabel(i, 'pt', ($event.detail.value ?? '').toString())"
-                        placeholder="Ex: Ouro"
-                      ></ion-input>
-                    </ion-col>
-
-                    <ion-col size="6">
-                      <ion-label position="stacked">Label (en)</ion-label>
-                      <ion-input
-                        [value]="getOptLabel(opt, 'en')"
-                        (ionInput)="setOptionLabel(i, 'en', ($event.detail.value ?? '').toString())"
-                        placeholder="Ex: Gold"
-                      ></ion-input>
-                    </ion-col>
-
-                    <ion-col size="12" class="ion-text-right">
-                      <ion-button fill="clear" color="danger" (click)="removeOption(i)">
-                        Remover opção
-                      </ion-button>
-                    </ion-col>
-                  </ion-row>
-                </ion-grid>
-              </ion-item>
-
-              <ion-item lines="none">
-                <ion-button expand="block" fill="outline" (click)="addOption()">
-                  + Adicionar opção
-                </ion-button>
-              </ion-item>
-            </ion-list>
-          </ng-container>
         </ng-container>
+      </ng-container>
 
-        <!-- ===================== TEXT/TITLE/SUBTITLE ===================== -->
-        <ng-container *ngIf="type === 'TITLE' || type === 'SUBTITLE' || type === 'TEXT_BLOCK'">
+      <!-- ========================= STATIC ========================= -->
+      <ng-container *ngIf="mode === 'STATIC'">
+
+        <ion-item>
+          <ion-label position="stacked">Tipo estático</ion-label>
+          <ion-select [(ngModel)]="staticType" (ionChange)="onStaticTypeChange()">
+            <ion-select-option value="TITLE">TITLE</ion-select-option>
+            <ion-select-option value="SUBTITLE">SUBTITLE</ion-select-option>
+            <ion-select-option value="TEXT_BLOCK">TEXT_BLOCK</ion-select-option>
+            <ion-select-option value="DIVIDER">DIVIDER</ion-select-option>
+            <ion-select-option value="IMAGE_DECORATIVE">IMAGE_DECORATIVE</ion-select-option>
+          </ion-select>
+        </ion-item>
+
+        <ng-container *ngIf="staticType === 'TITLE' || staticType === 'SUBTITLE' || staticType === 'TEXT_BLOCK'">
           <ion-item>
             <ion-label position="stacked">Texto (pt)</ion-label>
-            <ion-input
-              [value]="textPt"
-              (ionInput)="textPt = ($event.detail.value ?? '').toString()"
-            ></ion-input>
+            <ion-input [(ngModel)]="textPt"></ion-input>
           </ion-item>
 
           <ion-item>
-            <ion-label position="stacked">Texto (en)</ion-label>
-            <ion-input
-              [value]="textEn"
-              (ionInput)="textEn = ($event.detail.value ?? '').toString()"
-            ></ion-input>
+            <ion-label position="stacked">Text (en)</ion-label>
+            <ion-input [(ngModel)]="textEn"></ion-input>
           </ion-item>
         </ng-container>
 
-        <!-- ===================== IMAGE_DECORATIVE ===================== -->
-        <ng-container *ngIf="type === 'IMAGE_DECORATIVE'">
+        <ng-container *ngIf="staticType === 'IMAGE_DECORATIVE'">
           <ion-item>
             <ion-label position="stacked">URL da imagem</ion-label>
-            <ion-input
-              [value]="imageUrl"
-              (ionInput)="imageUrl = ($event.detail.value ?? '').toString()"
-              placeholder="https://..."
-            ></ion-input>
+            <ion-input [(ngModel)]="imageUrl" placeholder="https://..."></ion-input>
           </ion-item>
 
           <ion-item>
             <ion-label position="stacked">Alt (pt)</ion-label>
-            <ion-input
-              [value]="altPt"
-              (ionInput)="altPt = ($event.detail.value ?? '').toString()"
-            ></ion-input>
+            <ion-input [(ngModel)]="altPt"></ion-input>
           </ion-item>
 
           <ion-item>
             <ion-label position="stacked">Alt (en)</ion-label>
-            <ion-input
-              [value]="altEn"
-              (ionInput)="altEn = ($event.detail.value ?? '').toString()"
-            ></ion-input>
+            <ion-input [(ngModel)]="altEn"></ion-input>
           </ion-item>
         </ng-container>
 
-        <!-- ===================== DIVIDER ===================== -->
-        <ng-container *ngIf="type === 'DIVIDER'">
-          <ion-item>
-            <ion-label>
-              <h2>Divisor</h2>
-              <p>Nenhum campo adicional.</p>
-            </ion-label>
-          </ion-item>
-        </ng-container>
-      </ion-list>
+      </ng-container>
 
-      <div style="height: 12px;"></div>
-
-      <ion-button expand="block" (click)="save()">
-        Salvar elemento
-      </ion-button>
     </ion-content>
   `,
 })
 export class ElementEditorModal implements OnInit {
-  @Input() mode: Mode = 'create';
   @Input() element?: FormElement;
 
-  // UI state
-  type: FormElement['type'] = 'FIELD';
+  isEdit = false;
 
-  // FIELD fields
+  mode: 'FIELD' | 'STATIC' = 'FIELD';
+
   inputTypeOptions: InputType[] = [
     'TEXT',
     'TEXTAREA',
@@ -262,198 +235,242 @@ export class ElementEditorModal implements OnInit {
     'SIGNATURE',
   ];
 
-  fieldKey = '';
-  fieldInputType: InputType = 'TEXT';
+  // FIELD
+  field: FieldElement = {
+    type: 'FIELD',
+    key: '',
+    input_type: 'TEXT',
+  };
   labelPt = '';
   labelEn = '';
-  placeholderPt = '';
-  placeholderEn = '';
+  phPt = '';
+  phEn = '';
   required = false;
 
   options: FieldOption[] = [];
+  // para facilitar binding dos labels (evitar mexer no objeto a cada tecla)
+  optLabelPt: string[] = [];
+  optLabelEn: string[] = [];
 
-  // STATIC text
+  // STATIC
+  staticType: StaticType = 'TITLE';
   textPt = '';
   textEn = '';
-
-  // IMAGE_DECORATIVE
   imageUrl = '';
   altPt = '';
   altEn = '';
 
   constructor(private modalCtrl: ModalController) {}
 
-  ngOnInit(): void {
-    if (!this.element) return;
+  ngOnInit() {
+    this.isEdit = !!this.element;
 
-    this.type = this.element.type;
-
-    if (this.type === 'FIELD') {
-      const f = this.element as FieldElement;
-      this.fieldKey = (f.key ?? '').toString();
-      this.fieldInputType = (f.input_type ?? 'TEXT') as InputType;
-
-      const lbl = f.label || {};
-      this.labelPt = (lbl['pt'] ?? '').toString();
-      this.labelEn = (lbl['en'] ?? '').toString();
-
-      const ph = f.placeholder || {};
-      this.placeholderPt = (ph['pt'] ?? '').toString();
-      this.placeholderEn = (ph['en'] ?? '').toString();
-
-      this.required = !!(f.rules && f.rules.required);
-      this.options = Array.isArray(f.options) ? [...f.options] : [];
+    if (!this.element) {
+      // defaults
+      this.mode = 'FIELD';
+      this.syncLabelsFromField();
+      return;
     }
 
-    if (this.type === 'TITLE' || this.type === 'SUBTITLE' || this.type === 'TEXT_BLOCK') {
-      const st: any = this.element;
-      const t: LocalizedText = st.text || {};
-      this.textPt = (t['pt'] ?? '').toString();
-      this.textEn = (t['en'] ?? '').toString();
-    }
+    if ((this.element as any).type === 'FIELD') {
+      this.mode = 'FIELD';
+      const el = this.element as FieldElement;
+      this.field = {
+        type: 'FIELD',
+        key: el.key ?? '',
+        input_type: el.input_type ?? 'TEXT',
+        label: el.label,
+        placeholder: el.placeholder,
+        options: el.options,
+        rules: el.rules,
+        photo_purpose: el.photo_purpose,
+      };
 
-    if (this.type === 'IMAGE_DECORATIVE') {
-      const img: any = this.element;
-      this.imageUrl = (img.url ?? '').toString();
+      this.labelPt = (el.label && el.label['pt']) ? String(el.label['pt']) : '';
+      this.labelEn = (el.label && el.label['en']) ? String(el.label['en']) : '';
+      this.phPt = (el.placeholder && el.placeholder['pt']) ? String(el.placeholder['pt']) : '';
+      this.phEn = (el.placeholder && el.placeholder['en']) ? String(el.placeholder['en']) : '';
+      this.required = !!el.rules?.required;
 
-      const alt: LocalizedText = img.alt || {};
-      this.altPt = (alt['pt'] ?? '').toString();
-      this.altEn = (alt['en'] ?? '').toString();
+      this.options = Array.isArray(el.options) ? el.options.map(o => ({
+        value: String(o.value ?? ''),
+        label: o.label ? { ...o.label } : undefined,
+      })) : [];
+
+      this.rebuildOptionLabelBuffers();
+    } else {
+      this.mode = 'STATIC';
+      const st = this.element as StaticElement;
+      this.staticType = st.type;
+
+      if (st.type === 'TITLE' || st.type === 'SUBTITLE' || st.type === 'TEXT_BLOCK') {
+        const t = st.text as LocalizedText;
+        this.textPt = t?.['pt'] ? String(t['pt']) : '';
+        this.textEn = t?.['en'] ? String(t['en']) : '';
+      }
+
+      if (st.type === 'IMAGE_DECORATIVE') {
+        this.imageUrl = (st.url ?? '').toString();
+        const alt = st.alt;
+        this.altPt = alt?.['pt'] ? String(alt['pt']) : '';
+        this.altEn = alt?.['en'] ? String(alt['en']) : '';
+      }
     }
   }
 
-  cancel() {
+  close() {
     this.modalCtrl.dismiss(null, 'cancel');
   }
 
-  onTypeChange(v: any) {
-    this.type = v as any;
+  confirm() {
+    if (this.mode === 'FIELD') {
+      // monta label/placeholder
+      const label = this.makeLocalized(this.labelPt, this.labelEn);
+      const placeholder = this.makeLocalized(this.phPt, this.phEn);
 
-    // reset some fields when switching type
-    if (this.type !== 'FIELD') {
-      this.fieldKey = '';
-      this.fieldInputType = 'TEXT';
+      const rules: FieldRules = { ...(this.field.rules || {}) };
+      if (this.required) rules.required = true;
+      else delete rules.required;
+
+      // injeta labels de options nos objetos
+      if (this.needsOptions(this.field.input_type)) {
+        this.options = (this.options || []).map((o, i) => {
+          const pt = (this.optLabelPt[i] ?? '').trim();
+          const en = (this.optLabelEn[i] ?? '').trim();
+          const lbl = this.makeLocalized(pt, en);
+          return {
+            value: (o.value ?? '').toString(),
+            label: lbl || undefined,
+          };
+        });
+      } else {
+        this.options = [];
+      }
+
+      const built: FieldElement = {
+        type: 'FIELD',
+        key: (this.field.key ?? '').toString(),
+        input_type: this.field.input_type,
+        ...(label ? { label } : {}),
+        ...(placeholder ? { placeholder } : {}),
+        ...(this.needsOptions(this.field.input_type) ? { options: this.options } : {}),
+        ...(Object.keys(rules).length ? { rules } : {}),
+        ...(this.field.photo_purpose ? { photo_purpose: this.field.photo_purpose } : {}),
+      };
+
+      this.modalCtrl.dismiss(built, 'confirm');
+      return;
+    }
+
+    // STATIC
+    const st = this.buildStatic();
+    this.modalCtrl.dismiss(st, 'confirm');
+  }
+
+  onModeChange() {
+    if (this.mode === 'FIELD') {
+      this.field = { type: 'FIELD', key: '', input_type: 'TEXT' };
       this.labelPt = '';
       this.labelEn = '';
-      this.placeholderPt = '';
-      this.placeholderEn = '';
+      this.phPt = '';
+      this.phEn = '';
       this.required = false;
       this.options = [];
+      this.optLabelPt = [];
+      this.optLabelEn = [];
+    } else {
+      this.staticType = 'TITLE';
+      this.textPt = '';
+      this.textEn = '';
+      this.imageUrl = '';
+      this.altPt = '';
+      this.altEn = '';
     }
   }
 
-  onInputTypeChange(v: any) {
-    this.fieldInputType = (v as InputType) || 'TEXT';
-
-    // if type doesn't use options, drop them
-    if (!this.needsOptions(this.fieldInputType)) {
+  onFieldTypeChange() {
+    if (!this.needsOptions(this.field.input_type)) {
       this.options = [];
-    } else if (!Array.isArray(this.options)) {
-      this.options = [];
+      this.optLabelPt = [];
+      this.optLabelEn = [];
+    } else if (!this.options.length) {
+      this.addOption();
     }
   }
 
-  needsOptions(inputType: InputType): boolean {
-    return inputType === 'SELECT' || inputType === 'SINGLE_CHOICE' || inputType === 'MULTI_CHOICE';
+  onStaticTypeChange() {
+    // limpa campos conforme tipo
+    if (this.staticType === 'DIVIDER') {
+      this.textPt = '';
+      this.textEn = '';
+      this.imageUrl = '';
+      this.altPt = '';
+      this.altEn = '';
+    }
+    if (this.staticType === 'IMAGE_DECORATIVE') {
+      this.textPt = '';
+      this.textEn = '';
+    }
+  }
+
+  needsOptions(t: InputType) {
+    return t === 'SELECT' || t === 'SINGLE_CHOICE' || t === 'MULTI_CHOICE';
   }
 
   addOption() {
-    this.options = [...(this.options || []), { value: '', label: { pt: '', en: '' } }];
+    this.options.push({ value: '' });
+    this.optLabelPt.push('');
+    this.optLabelEn.push('');
   }
 
   removeOption(i: number) {
-    this.options = (this.options || []).filter((_, idx) => idx !== i);
+    this.options.splice(i, 1);
+    this.optLabelPt.splice(i, 1);
+    this.optLabelEn.splice(i, 1);
   }
 
-  setOptionValue(i: number, value: string) {
-    const opts = [...(this.options || [])];
-    const cur = opts[i] || { value: '', label: {} };
-    opts[i] = { ...cur, value };
-    this.options = opts;
+  private rebuildOptionLabelBuffers() {
+    this.optLabelPt = this.options.map(o => (o.label?.['pt'] ? String(o.label['pt']) : ''));
+    this.optLabelEn = this.options.map(o => (o.label?.['en'] ? String(o.label['en']) : ''));
   }
 
-  getOptLabel(opt: FieldOption, lang: 'pt' | 'en'): string {
-    const lbl = opt.label || {};
-    return (lbl[lang] ?? '').toString();
+  private makeLocalized(pt: string, en: string): LocalizedText | null {
+    const p = (pt ?? '').trim();
+    const e = (en ?? '').trim();
+    if (!p && !e) return null;
+    const out: LocalizedText = {};
+    if (p) out['pt'] = p;
+    if (e) out['en'] = e;
+    return out;
   }
 
-  setOptionLabel(i: number, lang: 'pt' | 'en', value: string) {
-    const opts = [...(this.options || [])];
-    const cur = opts[i] || { value: '', label: {} };
-    const lbl = { ...(cur.label || {}) };
-    lbl[lang] = value;
-
-    opts[i] = { ...cur, label: lbl };
-    this.options = opts;
+  private syncLabelsFromField() {
+    this.labelPt = '';
+    this.labelEn = '';
+    this.phPt = '';
+    this.phEn = '';
+    this.required = false;
   }
 
-  private buildLocalized(pt: string, en: string): LocalizedText | undefined {
-    const p = (pt || '').trim();
-    const e = (en || '').trim();
-    if (!p && !e) return undefined;
-    return { pt: p, en: e };
-  }
-
-  save() {
-    const id = this.ensureId(this.element);
-
-    if (this.type === 'FIELD') {
-      const key = (this.fieldKey || '').trim();
-      const input_type = this.fieldInputType || 'TEXT';
-
-      const label = this.buildLocalized(this.labelPt, this.labelEn);
-      const placeholder = this.buildLocalized(this.placeholderPt, this.placeholderEn);
-
-      const rules = this.required ? { required: true } : undefined;
-
-      const needs = this.needsOptions(input_type);
-      const options = needs ? (this.options || []).map(o => ({
-        value: (o.value ?? '').toString(),
-        label: o.label ? { ...o.label } : undefined,
-      })) : undefined;
-
-      const el: any = {
-        id,
-        type: 'FIELD',
-        key,
-        input_type,
-        label,
-        placeholder,
-        rules,
-        options,
-      } satisfies any;
-
-      this.modalCtrl.dismiss(el as FormElement, 'ok');
-      return;
+  private buildStatic(): StaticElement {
+    if (this.staticType === 'DIVIDER') {
+      return { type: 'DIVIDER' };
     }
 
-    if (this.type === 'TITLE' || this.type === 'SUBTITLE' || this.type === 'TEXT_BLOCK') {
-      const text = this.buildLocalized(this.textPt, this.textEn) || { pt: '', en: '' };
-      const st: any = { id, type: this.type, text };
-      this.modalCtrl.dismiss(st as FormElement, 'ok');
-      return;
+    if (this.staticType === 'IMAGE_DECORATIVE') {
+      const alt = this.makeLocalized(this.altPt, this.altEn);
+      return {
+        type: 'IMAGE_DECORATIVE',
+        url: (this.imageUrl || '').trim(),
+        ...(alt ? { alt } : {}),
+      };
     }
 
-    if (this.type === 'IMAGE_DECORATIVE') {
-      const url = (this.imageUrl || '').trim();
-      const alt = this.buildLocalized(this.altPt, this.altEn);
-      const img: any = { id, type: 'IMAGE_DECORATIVE', url, alt };
-      this.modalCtrl.dismiss(img as FormElement, 'ok');
-      return;
-    }
-
-    // DIVIDER
-    const div: any = { id, type: 'DIVIDER' };
-    this.modalCtrl.dismiss(div as FormElement, 'ok');
-  }
-
-  // teu schema usa id opcional (no renderer.types não tem, mas teu builder provavelmente usa)
-  private ensureId(el?: FormElement): string {
-    const anyEl: any = el as any;
-    return (anyEl && anyEl.id) ? String(anyEl.id) : this.genId();
-  }
-
-  private genId(): string {
-    return 'el_' + Math.random().toString(36).slice(2, 10);
+    // TITLE / SUBTITLE / TEXT_BLOCK
+    const text = this.makeLocalized(this.textPt, this.textEn) || { pt: '', en: '' };
+    return {
+      type: this.staticType,
+      text,
+    } as StaticElement;
   }
 }

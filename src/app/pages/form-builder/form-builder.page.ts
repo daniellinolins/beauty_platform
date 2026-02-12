@@ -141,7 +141,7 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     private api: ApiService,
     private nav: NavController,
     private alertCtrl: AlertController,
-    private modalCtrl: ModalController
+    private modalCtrl: ModalController,
   ) {}
 
   ngOnInit() {
@@ -185,7 +185,10 @@ export class FormBuilderPage implements OnInit, OnDestroy {
 
   setTab(v: any) {
     const val = (v ?? '').toString() as TabKey;
-    this.tab = (val === 'meta' || val === 'structure' || val === 'versions') ? val : 'meta';
+    this.tab =
+      val === 'meta' || val === 'structure' || val === 'versions'
+        ? val
+        : 'meta';
   }
 
   // ---------------------------
@@ -228,33 +231,39 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     if (!this.idForm) return;
 
     const list = await firstValueFrom(
-      this.api.listFormVersions(this.idForm, this.tenantId).pipe(takeUntil(this.destroy$))
+      this.api
+        .listFormVersions(this.idForm, this.tenantId)
+        .pipe(takeUntil(this.destroy$)),
     );
 
     // list pode vir array ou {items: []}
     const anyList: any = list as any;
-    this.versions = Array.isArray(anyList) ? anyList : (anyList?.items || []);
+    this.versions = Array.isArray(anyList) ? anyList : anyList?.items || [];
   }
 
   async loadVersion(idFormVersion: number) {
     if (!this.idForm) return;
 
     const version = await firstValueFrom(
-      this.api.getFormVersion(this.idForm, idFormVersion, this.tenantId).pipe(takeUntil(this.destroy$))
+      this.api
+        .getFormVersion(this.idForm, idFormVersion, this.tenantId)
+        .pipe(takeUntil(this.destroy$)),
     );
 
     const v: any = version || {};
     this.idFormVersion = idFormVersion;
-    this.versionStatus = (v.status || 'DRAFT');
+    this.versionStatus = v.status || 'DRAFT';
     this.versionNumber = v.version_number ?? null;
 
     // schema_json pode vir como string JSON
     const schemaJson = v.schema_json;
-    const parsed = typeof schemaJson === 'string' ? JSON.parse(schemaJson) : schemaJson;
+    const parsed =
+      typeof schemaJson === 'string' ? JSON.parse(schemaJson) : schemaJson;
     if (parsed) {
       this.schema = parsed as FormSchema;
       // garante coerência
-      this.defaultLanguage = (this.schema.default_language === 'en' ? 'en' : 'pt');
+      this.defaultLanguage =
+        this.schema.default_language === 'en' ? 'en' : 'pt';
       this.selectedSectionIndex = 0;
     }
   }
@@ -277,10 +286,14 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     const newId = `sec-${Date.now()}`;
     this.schema.sections = [
       ...(this.schema.sections || []),
-      { id: newId, title: { pt: 'Nova Seção', en: 'New Section' }, elements: [] },
+      {
+        id: newId,
+        title: { pt: 'Nova Seção', en: 'New Section' },
+        elements: [],
+      },
     ];
 
-    this.selectedSectionIndex = (this.schema.sections.length - 1);
+    this.selectedSectionIndex = this.schema.sections.length - 1;
   }
 
   async renameSection(i: number) {
@@ -290,8 +303,18 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     const alert = await this.alertCtrl.create({
       header: 'Renomear seção',
       inputs: [
-        { name: 'pt', type: 'text', value: (s.title as any)?.['pt'] || '', placeholder: 'Título (pt)' },
-        { name: 'en', type: 'text', value: (s.title as any)?.['en'] || '', placeholder: 'Title (en)' },
+        {
+          name: 'pt',
+          type: 'text',
+          value: (s.title as any)?.['pt'] || '',
+          placeholder: 'Título (pt)',
+        },
+        {
+          name: 'en',
+          type: 'text',
+          value: (s.title as any)?.['en'] || '',
+          placeholder: 'Title (en)',
+        },
       ],
       buttons: [
         { text: 'Cancelar', role: 'cancel' },
@@ -335,18 +358,18 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   }
 
   fieldKey(el: any): string {
-    return el?.type === 'FIELD' ? (el.field?.key || '') : '';
+    return el?.type === 'FIELD' ? el.field?.key || '' : '';
   }
 
   fieldInputType(el: any): string {
-    return el?.type === 'FIELD' ? (el.field?.input_type || '') : '';
+    return el?.type === 'FIELD' ? el.field?.input_type || '' : '';
   }
 
   staticText(el: any): string {
     if (!el) return '';
-    if (el.type === 'TITLE') return (el.text?.[this.defaultLanguage] || '');
-    if (el.type === 'SUBTITLE') return (el.text?.[this.defaultLanguage] || '');
-    if (el.type === 'TEXT_BLOCK') return (el.text?.[this.defaultLanguage] || '');
+    if (el.type === 'TITLE') return el.text?.[this.defaultLanguage] || '';
+    if (el.type === 'SUBTITLE') return el.text?.[this.defaultLanguage] || '';
+    if (el.type === 'TEXT_BLOCK') return el.text?.[this.defaultLanguage] || '';
     if (el.type === 'IMAGE_DECORATIVE') return `IMAGE: ${el.url || ''}`;
     if (el.type === 'DIVIDER') return 'DIVIDER';
     return el.type || '';
@@ -408,13 +431,25 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   // Actions (save/publish/preview)
   // ---------------------------
   async preview() {
+    // monta um snapshot do schema com o estado atual da UI (sections + elements)
+    const previewSchema = {
+      ...this.schema,
+      default_language: this.defaultLanguage,
+      sections: (this.sections || []).map((s: any) => ({
+        ...s,
+        elements: Array.isArray(s.elements) ? s.elements : [],
+      })),
+    };
+
     const modal = await this.modalCtrl.create({
       component: FormPreviewModal,
       componentProps: {
-        schema: this.schema,
-        defaultLanguage: this.defaultLanguage,
+        schema: previewSchema,
+        // se você quiser já abrir na seção selecionada:
+        sectionIndex: this.selectedSectionIndex ?? 0,
       },
     });
+
     await modal.present();
   }
 
@@ -427,13 +462,15 @@ export class FormBuilderPage implements OnInit, OnDestroy {
 
     try {
       const created = await firstValueFrom(
-        this.api.createForm({
-          tenant_id: this.tenantId,
-          name: this.formName,
-          description: this.formDescription,
-          status: this.formStatus,
-          default_language: this.defaultLanguage,
-        }).pipe(takeUntil(this.destroy$))
+        this.api
+          .createForm({
+            tenant_id: this.tenantId,
+            name: this.formName,
+            description: this.formDescription,
+            status: this.formStatus,
+            default_language: this.defaultLanguage,
+          })
+          .pipe(takeUntil(this.destroy$)),
       );
 
       const formId = Number((created as any)?.id_form || (created as any)?.id);
@@ -442,15 +479,19 @@ export class FormBuilderPage implements OnInit, OnDestroy {
       this.idForm = formId;
 
       const createdV = await firstValueFrom(
-        this.api.createFormVersion({
-          tenant_id: this.tenantId,
-          id_form: this.idForm,
-          status: 'DRAFT',
-          schema_json: this.schema,
-        }).pipe(takeUntil(this.destroy$))
+        this.api
+          .createFormVersion({
+            tenant_id: this.tenantId,
+            id_form: this.idForm,
+            status: 'DRAFT',
+            schema_json: this.schema,
+          })
+          .pipe(takeUntil(this.destroy$)),
       );
 
-      this.idFormVersion = Number((createdV as any)?.id_form_version || (createdV as any)?.id);
+      this.idFormVersion = Number(
+        (createdV as any)?.id_form_version || (createdV as any)?.id,
+      );
       this.versionStatus = 'DRAFT';
 
       await this.refreshVersions();
@@ -482,15 +523,19 @@ export class FormBuilderPage implements OnInit, OnDestroy {
 
     try {
       const createdV = await firstValueFrom(
-        this.api.createFormVersion({
-          tenant_id: this.tenantId,
-          id_form: this.idForm,
-          status: 'DRAFT',
-          schema_json: this.schema,
-        }).pipe(takeUntil(this.destroy$))
+        this.api
+          .createFormVersion({
+            tenant_id: this.tenantId,
+            id_form: this.idForm,
+            status: 'DRAFT',
+            schema_json: this.schema,
+          })
+          .pipe(takeUntil(this.destroy$)),
       );
 
-      this.idFormVersion = Number((createdV as any)?.id_form_version || (createdV as any)?.id);
+      this.idFormVersion = Number(
+        (createdV as any)?.id_form_version || (createdV as any)?.id,
+      );
       this.versionStatus = 'DRAFT';
 
       await this.refreshVersions();

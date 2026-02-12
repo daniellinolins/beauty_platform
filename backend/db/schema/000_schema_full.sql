@@ -179,7 +179,7 @@ CREATE TABLE `form` (
   KEY `ix_form_tenant` (`tenant_id`),
   KEY `ix_form_status` (`tenant_id`,`status`),
   CONSTRAINT `fk_form_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=27 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -297,6 +297,45 @@ CREATE TABLE `form_submission` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `form_submission_analytics`
+--
+
+DROP TABLE IF EXISTS `form_submission_analytics`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `form_submission_analytics` (
+  `id_form_submission_analytics` bigint(20) NOT NULL AUTO_INCREMENT,
+  `id_form_submission` bigint(20) NOT NULL DEFAULT 0,
+  `tenant_id` bigint(20) NOT NULL,
+  `id_form` bigint(20) NOT NULL,
+  `id_form_version` bigint(20) NOT NULL,
+  `clinic_id` bigint(20) NOT NULL,
+  `client_id` bigint(20) NOT NULL,
+  `client_clinic_id` bigint(20) DEFAULT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'DRAFT',
+  `column_name` varchar(100) DEFAULT NULL,
+  `value_string` varchar(500) DEFAULT NULL,
+  `value_long_text` mediumtext DEFAULT NULL,
+  `value_number` decimal(15,2) DEFAULT NULL,
+  `value_date` date DEFAULT NULL,
+  `value_time` time DEFAULT NULL,
+  `value_datetime` datetime DEFAULT NULL,
+  `value_boolean` tinyint(4) DEFAULT NULL,
+  PRIMARY KEY (`id_form_submission_analytics`),
+  KEY `idx_form_field_string` (`tenant_id`,`id_form`,`column_name`,`value_string`),
+  KEY `idx_form_field_number` (`tenant_id`,`id_form`,`column_name`,`value_number`),
+  KEY `idx_form_field_date` (`tenant_id`,`id_form`,`column_name`,`value_date`),
+  KEY `idx_form_field_datetime` (`tenant_id`,`id_form`,`column_name`,`value_datetime`),
+  KEY `idx_form_field_boolean` (`tenant_id`,`id_form`,`column_name`,`value_boolean`),
+  KEY `idx_submission_lookup` (`id_form_submission`),
+  KEY `idx_clinic_form` (`tenant_id`,`clinic_id`,`id_form`),
+  KEY `idx_tenant_client` (`tenant_id`,`client_id`),
+  KEY `idx_client` (`client_id`),
+  KEY `idx_status` (`tenant_id`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `form_submission_file`
 --
 
@@ -352,7 +391,7 @@ CREATE TABLE `form_version` (
   KEY `ix_form_version_status` (`tenant_id`,`status`),
   CONSTRAINT `fk_form_version_form` FOREIGN KEY (`id_form`) REFERENCES `form` (`id_form`),
   CONSTRAINT `fk_form_version_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=23 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=29 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -511,4 +550,4 @@ SET character_set_client = @saved_cs_client;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-02-11 15:46:35
+-- Dump completed on 2026-02-12 13:53:33

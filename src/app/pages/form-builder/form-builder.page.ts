@@ -431,22 +431,12 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   // Actions (save/publish/preview)
   // ---------------------------
   async preview() {
-    // monta um snapshot do schema com o estado atual da UI (sections + elements)
-    const previewSchema = {
-      ...this.schema,
-      default_language: this.defaultLanguage,
-      sections: (this.sections || []).map((s: any) => ({
-        ...s,
-        elements: Array.isArray(s.elements) ? s.elements : [],
-      })),
-    };
-
     const modal = await this.modalCtrl.create({
       component: FormPreviewModal,
       componentProps: {
-        schema: previewSchema,
-        // se você quiser já abrir na seção selecionada:
+        schema: this.schema,
         sectionIndex: this.selectedSectionIndex ?? 0,
+        defaultLanguage: this.defaultLanguage,
       },
     });
 

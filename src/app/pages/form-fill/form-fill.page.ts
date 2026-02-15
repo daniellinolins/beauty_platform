@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy } from '@angular/core';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { IonicModule, ToastController } from '@ionic/angular';
-import { Subject, takeUntil } from 'rxjs';
+import { Subject, takeUntil, firstValueFrom } from 'rxjs';
 import { ApiService } from 'src/app/services/api';
 import { FormRendererComponent } from 'src/app/components/form-renderer/form-renderer.component';
 
@@ -33,6 +33,10 @@ export class FormFillPage implements OnDestroy {
   submissionId: number | null = null;
   payload: any = {};
 
+  // ✅ parâmetros mínimos para criar submission
+  clinicId = 1;
+  clientId = 1;
+
   constructor(
     private route: ActivatedRoute,
     private router: Router,
@@ -43,7 +47,6 @@ export class FormFillPage implements OnDestroy {
   ionViewWillEnter() {
     this.loading = true;
 
-    // ✅ CORREÇÃO: sua rota usa :idForm (não :id)
     const id = Number(this.route.snapshot.paramMap.get('idForm'));
     if (!id || Number.isNaN(id)) {
       this.loading = false;
@@ -53,11 +56,14 @@ export class FormFillPage implements OnDestroy {
 
     this.idForm = id;
 
-    // opcional: melhora o título sem depender do backend das versões
-    this.loadFormMeta();
+    // ✅ pega clinic_id e client_id via querystring (fallback 1)
+    const qClinic = Number(this.route.snapshot.queryParamMap.get('clinic_id'));
+    const qClient = Number(this.route.snapshot.queryParamMap.get('client_id'));
+    if (qClinic && !Number.isNaN(qClinic)) this.clinicId = qClinic;
+    if (qClient && !Number.isNaN(qClient)) this.clientId = qClient;
 
-    // carrega versão para preencher
-    this.loadPublishedOrLatestVersion();
+    this.loadFormMeta();
+    this.loadPublishedOrLatestVersionAndCreateSubmission();
   }
 
   ngOnDestroy(): void {
@@ -66,7 +72,6 @@ export class FormFillPage implements OnDestroy {
   }
 
   private async loadFormMeta() {
-    // listForms é o que você já tem no ApiService
     this.api
       .listForms(this.tenantId)
       .pipe(takeUntil(this.destroy$))
@@ -75,142 +80,109 @@ export class FormFillPage implements OnDestroy {
           const found = (list || []).find((f: any) => Number(f?.id_form) === Number(this.idForm));
           if (found?.name) this.formName = found.name;
         },
-        error: () => {
-          // não é crítico
-        },
+        error: () => {},
       });
   }
 
   private mapDefaultLanguageToRenderer(schemaDefaultLang: any): string {
     const s = (schemaDefaultLang ?? '').toString();
-
-    // se já vier completo, mantém
     if (s === 'pt-PT' || s === 'pt-BR' || s === 'en-US' || s === 'es-ES') return s;
-
-    // seu schema normalmente salva curto: pt/en/es
     if (s === 'pt') return 'pt-PT';
     if (s === 'en') return 'en-US';
     if (s === 'es') return 'es-ES';
-
     return 'pt-PT';
   }
 
-  private loadPublishedOrLatestVersion() {
-    this.api
-      .listFormVersions(this.tenantId, this.idForm)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: async (list: any) => {
-          const versions = Array.isArray(list) ? list : [];
+  private async loadPublishedOrLatestVersionAndCreateSubmission() {
+    try {
+      const list: any = await firstValueFrom(this.api.listFormVersions(this.tenantId, this.idForm));
+      const versions = Array.isArray(list) ? list : [];
 
-          if (!versions.length) {
-            this.loading = false;
-            const t = await this.toastCtrl.create({
-              message: 'Nenhuma versão encontrada para este formulário.',
-              duration: 2500,
-              color: 'warning',
-            });
-            await t.present();
-            return;
-          }
+      if (!versions.length) {
+        this.loading = false;
+        await this.toast('Nenhuma versão encontrada para este formulário.', 'warning');
+        return;
+      }
 
-          // ✅ preferência para PUBLISHED
-          const published = versions.find((v: any) => (v?.status || '').toUpperCase() === 'PUBLISHED');
-          const picked = published || versions[0]; // versions já vem DESC no backend
+      const published = versions.find((v: any) => (v?.status || '').toUpperCase() === 'PUBLISHED');
+      const picked = published || versions[0];
 
-          this.versionId = picked?.id_form_version ?? null;
+      this.versionId = picked?.id_form_version ?? null;
+      if (!this.versionId) {
+        this.loading = false;
+        await this.toast('Versão inválida (sem id_form_version).', 'danger');
+        return;
+      }
 
-          // schema_json pode vir string
-          let schema: any = picked?.schema_json ?? null;
-          try {
-            if (typeof schema === 'string') schema = JSON.parse(schema);
-          } catch {
-            schema = null;
-          }
+      // schema_json pode vir string
+      let schema: any = picked?.schema_json ?? null;
+      try {
+        if (typeof schema === 'string') schema = JSON.parse(schema);
+      } catch {
+        schema = null;
+      }
 
-          if (!schema) {
-            this.loading = false;
-            const t = await this.toastCtrl.create({
-              message: 'Schema inválido na versão do formulário.',
-              duration: 2500,
-              color: 'danger',
-            });
-            await t.present();
-            return;
-          }
+      if (!schema) {
+        this.loading = false;
+        await this.toast('Schema inválido na versão do formulário.', 'danger');
+        return;
+      }
 
-          this.defaultLang = this.mapDefaultLanguageToRenderer(schema?.default_language);
+      this.defaultLang = this.mapDefaultLanguageToRenderer(schema?.default_language);
 
-          // Seu schema é { sections:[{elements:[]}] }
-          const sections = Array.isArray(schema?.sections) ? schema.sections : [];
-          if (sections.length > 0) {
-            // por enquanto, renderiza todas as seções em sequência (concat)
-            // se seu renderer suporta "sections", você pode adaptar depois.
-            const all: any[] = [];
-            for (const s of sections) {
-              if (Array.isArray(s?.elements)) all.push(...s.elements);
-            }
-            this.elements = all;
-          } else {
-            // fallback se existir schema antigo
-            this.elements = Array.isArray(schema?.elements) ? schema.elements : [];
-          }
+      // concatena elementos de todas as seções
+      const sections = Array.isArray(schema?.sections) ? schema.sections : [];
+      const all: any[] = [];
+      for (const s of sections) {
+        if (Array.isArray(s?.elements)) all.push(...s.elements);
+      }
+      this.elements = all;
 
-          if (!this.elements.length) {
-            // não bloqueia, mas avisa
-            const t = await this.toastCtrl.create({
-              message: 'Aviso: versão carregada não possui elementos.',
-              duration: 2200,
-              color: 'warning',
-            });
-            await t.present();
-          }
+      // ✅ cria submission automaticamente
+      const submission = await firstValueFrom(
+        this.api.createSubmission({
+          tenant_id: this.tenantId,
+          clinic_id: this.clinicId,
+          client_id: this.clientId,
+          id_form: this.idForm,
+          id_form_version: this.versionId,
+        })
+      );
 
-          this.loading = false;
-        },
-        error: async (err) => {
-          console.error(err);
-          this.loading = false;
-          const t = await this.toastCtrl.create({
-            message: 'Erro ao carregar versões do formulário.',
-            duration: 2500,
-            color: 'danger',
-          });
-          await t.present();
-        },
-      });
+      this.submissionId = Number(submission?.id_form_submission || submission?.id);
+      if (!this.submissionId) {
+        // não bloqueia render, mas impede salvar
+        await this.toast(
+          'Submissão não retornou id. O formulário será exibido, mas não será possível salvar.',
+          'warning'
+        );
+      }
+
+      this.loading = false;
+    } catch (e: any) {
+      console.error(e);
+      this.loading = false;
+      await this.toast('Erro ao carregar versão publicada/criar submissão.', 'danger');
+    }
   }
 
   async onRendererError(err: unknown) {
     console.error('Renderer error:', err);
-
     let msg = 'Erro ao renderizar formulário.';
     if (typeof err === 'string') msg = err;
     else if (err && typeof err === 'object') {
       const anyErr: any = err;
-      if (typeof anyErr?.message === 'string' && anyErr.message.trim()) {
-        msg = anyErr.message;
-      }
+      if (typeof anyErr?.message === 'string' && anyErr.message.trim()) msg = anyErr.message;
     }
-
-    const t = await this.toastCtrl.create({
-      message: msg,
-      duration: 3000,
-      color: 'danger',
-    });
-    await t.present();
+    await this.toast(msg, 'danger');
   }
 
   async save() {
-    // Mantive seu comportamento: se não existir submissionId, avisa
     if (!this.submissionId) {
-      const t = await this.toastCtrl.create({
-        message:
-          'Nenhuma submissão ativa para salvar. (Se você quer salvar no backend, precisamos criar uma submission antes.)',
-        duration: 2800,
-        color: 'warning',
-      });
-      await t.present();
+      await this.toast(
+        'Nenhuma submissão ativa para salvar. (Não foi possível criar submission ao entrar.)',
+        'warning'
+      );
       return;
     }
 
@@ -219,22 +191,21 @@ export class FormFillPage implements OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: async () => {
-          const t = await this.toastCtrl.create({
-            message: 'Submissão salva.',
-            duration: 1800,
-            color: 'success',
-          });
-          await t.present();
+          await this.toast('Submissão salva.', 'success');
         },
         error: async (e) => {
           console.error(e);
-          const t = await this.toastCtrl.create({
-            message: 'Erro ao salvar submissão.',
-            duration: 2500,
-            color: 'danger',
-          });
-          await t.present();
+          await this.toast('Erro ao salvar submissão.', 'danger');
         },
       });
+  }
+
+  private async toast(message: string, color: 'success' | 'warning' | 'danger' | 'primary' = 'primary') {
+    const t = await this.toastCtrl.create({
+      message,
+      duration: 2500,
+      color,
+    });
+    await t.present();
   }
 }

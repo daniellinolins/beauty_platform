@@ -143,7 +143,7 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
-    // ✅ CORREÇÃO: sua rota usa :idForm (não :id)
+    // ✅ sua rota usa :idForm
     const id = this.route.snapshot.paramMap.get('idForm');
     this.idForm = id ? Number(id) : null;
 
@@ -160,9 +160,15 @@ export class FormBuilderPage implements OnInit, OnDestroy {
 
   private normalizeDefaultLanguage(input: any): DefaultLanguage {
     const s = (input ?? '').toString();
+
+    // já no formato completo
     if (s === 'pt-PT' || s === 'pt-BR' || s === 'en-US' || s === 'es-ES') return s;
+
+    // backend às vezes salva curto pt/en
     if (s === 'en') return 'en-US';
     if (s === 'es') return 'es-ES';
+    if (s === 'pt') return 'pt-PT';
+
     return 'pt-PT';
   }
 
@@ -221,31 +227,34 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     return 'medium';
   }
 
-  setFormName(v: any) {
-    this.formName = (v ?? '').toString().replace(/^\s+/, '');
+  // ---------------------------
+  // ✅ NOVO: carrega metadados do FORM via listagem (porque backend não tem GET /forms/<id>)
+  // ---------------------------
+  private async loadFormMeta() {
+    if (!this.idForm) return;
+
+    const list = await firstValueFrom(this.api.listForms(this.tenantId).pipe(takeUntil(this.destroy$)));
+    const found = (list || []).find((f: any) => Number(f?.id_form) === Number(this.idForm));
+
+    if (!found) return;
+
+    // ✅ não sobrescreve se usuário já digitou algo
+    if (!this.formName?.trim()) this.formName = found.name || '';
+    if (!this.formDescription?.trim()) this.formDescription = found.description || '';
+
+    const st = (found.status || '').toString().toUpperCase();
+    if (st === 'ACTIVE' || st === 'INACTIVE') this.formStatus = st;
+
+    // default_language pode vir 'pt-PT', 'en-US' ou curto 'pt'/'en'
+    if (found.default_language) this.defaultLanguage = this.normalizeDefaultLanguage(found.default_language);
+
+    // mantém schema alinhado com o idioma (no schema fica curto pt/en/es)
+    (this.schema as any).default_language = this.schemaLangKey();
   }
 
-  setFormDescription(v: any) {
-    this.formDescription = (v ?? '').toString();
-  }
-
-  setFormStatus(v: any) {
-    const val = (v ?? '').toString();
-    this.formStatus = val === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
-  }
-
-  setDefaultLanguage(v: any) {
-    this.defaultLanguage = this.normalizeDefaultLanguage(v);
-    const key = this.schemaLangKey();
-    (this.schema as any).default_language = key;
-    this.normalizeSchemaForUi();
-  }
-
-  setTab(v: any) {
-    const val = (v ?? '').toString() as TabKey;
-    this.tab = val === 'meta' || val === 'structure' || val === 'versions' ? val : 'meta';
-  }
-
+  // ---------------------------
+  // Load / Refresh
+  // ---------------------------
   async load() {
     this.errorMsg = '';
     this.infoMsg = '';
@@ -258,6 +267,10 @@ export class FormBuilderPage implements OnInit, OnDestroy {
         return;
       }
 
+      // ✅ carrega metadados primeiro
+      await this.loadFormMeta();
+
+      // versões + schema
       await this.refreshVersions();
 
       if (this.idFormVersion) {
@@ -316,6 +329,37 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     if (id) this.loadVersion(Number(id));
   }
 
+  // ---------------------------
+  // Meta handlers (HTML usa)
+  // ---------------------------
+  setFormName(v: any) {
+    this.formName = (v ?? '').toString().replace(/^\s+/, '');
+  }
+
+  setFormDescription(v: any) {
+    this.formDescription = (v ?? '').toString();
+  }
+
+  setFormStatus(v: any) {
+    const val = (v ?? '').toString();
+    this.formStatus = val === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE';
+  }
+
+  setDefaultLanguage(v: any) {
+    this.defaultLanguage = this.normalizeDefaultLanguage(v);
+    const key = this.schemaLangKey();
+    (this.schema as any).default_language = key;
+    this.normalizeSchemaForUi();
+  }
+
+  setTab(v: any) {
+    const val = (v ?? '').toString() as TabKey;
+    this.tab = val === 'meta' || val === 'structure' || val === 'versions' ? val : 'meta';
+  }
+
+  // ---------------------------
+  // Sections
+  // ---------------------------
   selectSection(i: number) {
     this.selectedSectionIndex = i;
   }
@@ -352,18 +396,8 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     const alert = await this.alertCtrl.create({
       header: 'Renomear seção',
       inputs: [
-        {
-          name: 'pt',
-          type: 'text',
-          value: (s.title as any)?.['pt'] || '',
-          placeholder: 'Título (pt)',
-        },
-        {
-          name: 'en',
-          type: 'text',
-          value: (s.title as any)?.['en'] || '',
-          placeholder: 'Title (en)',
-        },
+        { name: 'pt', type: 'text', value: (s.title as any)?.['pt'] || '', placeholder: 'Título (pt)' },
+        { name: 'en', type: 'text', value: (s.title as any)?.['en'] || '', placeholder: 'Title (en)' },
       ],
       buttons: [
         { text: 'Cancelar', role: 'cancel' },
@@ -372,7 +406,6 @@ export class FormBuilderPage implements OnInit, OnDestroy {
           handler: (data: any) => {
             const pt = (data?.pt ?? '').toString();
             const en = (data?.en ?? '').toString();
-
             s.title = { ...(s.title || {}), pt, en };
             this.ensureSectionTitleKeys(s);
           },
@@ -410,6 +443,9 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     this.selectedSectionIndex = to;
   }
 
+  // ---------------------------
+  // Elements
+  // ---------------------------
   isField(el: any): boolean {
     return el?.type === 'FIELD';
   }
@@ -488,6 +524,9 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     else sec.elements[index] = updated;
   }
 
+  // ---------------------------
+  // Preview / Create / Save Draft / Publish
+  // ---------------------------
   async preview() {
     const modal = await this.modalCtrl.create({
       component: FormPreviewModal,
@@ -542,7 +581,9 @@ export class FormBuilderPage implements OnInit, OnDestroy {
       this.idFormVersion = Number((createdV as any)?.id_form_version || (createdV as any)?.id);
       this.versionStatus = 'DRAFT';
 
+      await this.loadFormMeta(); // ✅ agora já preenche meta pelo listForms
       await this.refreshVersions();
+
       this.infoMsg = 'Form e rascunho criados com sucesso.';
       this.tab = 'structure';
     } catch (e: any) {
@@ -588,7 +629,9 @@ export class FormBuilderPage implements OnInit, OnDestroy {
       this.versionStatus = (saved?.status || 'DRAFT') as any;
       this.versionNumber = saved?.version_number ?? this.versionNumber;
 
+      await this.loadFormMeta(); // ✅ garante que meta vem do form
       await this.refreshVersions();
+
       this.infoMsg = 'Rascunho salvo com sucesso.';
       this.tab = 'structure';
     } catch (e: any) {
@@ -677,14 +720,13 @@ export class FormBuilderPage implements OnInit, OnDestroy {
       this.versionNumber = published?.version_number ?? this.versionNumber;
 
       await this.refreshVersions();
+      await this.loadFormMeta(); // ✅ mantém meta consistente
+
       this.infoMsg = 'Versão publicada com sucesso.';
       this.tab = 'versions';
     } catch (e: any) {
-      const status = e?.status;
       const msg = e?.error?.error || e?.error?.message || e?.message || 'Erro ao publicar.';
-
-      if (status === 409) this.errorMsg = msg;
-      else this.errorMsg = msg;
+      this.errorMsg = msg;
     } finally {
       this.loading = false;
     }
@@ -717,6 +759,8 @@ export class FormBuilderPage implements OnInit, OnDestroy {
       this.versionNumber = (createdV as any)?.version_number ?? this.versionNumber;
 
       await this.refreshVersions();
+      await this.loadFormMeta();
+
       this.infoMsg = 'Nova versão DRAFT criada (clonada da atual).';
       this.tab = 'structure';
     } catch (e: any) {

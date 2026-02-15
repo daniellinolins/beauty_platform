@@ -4,6 +4,7 @@ from flask_cors import CORS
 
 from routes.forms import bp_forms
 from routes.forms_versions import bp_forms_versions
+from routes.submissions import bp_submissions
 
 
 def create_app() -> Flask:
@@ -20,6 +21,7 @@ def create_app() -> Flask:
     # API routes
     app.register_blueprint(bp_forms)
     app.register_blueprint(bp_forms_versions)
+    app.register_blueprint(bp_submissions)
 
     return app
 

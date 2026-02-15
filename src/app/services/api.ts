@@ -6,7 +6,6 @@ import { environment } from '../../environments/environment';
 export type VersionStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 export type FormStatus = 'ACTIVE' | 'INACTIVE';
 
-
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private baseUrl = `${environment.apiBaseUrl}/api`;
@@ -25,11 +24,7 @@ export class ApiService {
     });
   }
 
-  getLatestFormVersion(
-    tenantId: number,
-    idForm: number,
-  ): Observable<any | null> {
-    // backend currently has only /versions (list). We pick the first (DESC) as "latest".
+  getLatestFormVersion(tenantId: number, idForm: number): Observable<any | null> {
     return this.listFormVersions(tenantId, idForm).pipe(
       map((list) => (Array.isArray(list) && list.length ? list[0] : null)),
     );
@@ -40,7 +35,7 @@ export class ApiService {
     name: string;
     description?: string;
     status?: FormStatus;
-    default_language?: string; //'pt' | 'en';
+    default_language?: string;
     code?: string;
   }): Observable<any> {
     return this.http.post(`${this.baseUrl}/forms`, req);
@@ -66,13 +61,13 @@ export class ApiService {
     req: { tenant_id: number; version_status?: VersionStatus; schema_json?: any },
   ): Observable<any> {
     return this.http.put(`${this.baseUrl}/forms/${formId}/versions/${formVersionId}`, req);
-  }  
+  }
 
   createFormVersion(req: {
     tenant_id: number;
     id_form: number;
     schema_json: any;
-    status?: VersionStatus; // frontend convenience (builder uses "status")
+    status?: VersionStatus;
   }): Observable<any> {
     return this.http.post(`${this.baseUrl}/forms/${req.id_form}/versions`, {
       tenant_id: req.tenant_id,
@@ -85,21 +80,38 @@ export class ApiService {
     return this.http.get(`${this.baseUrl}/forms/${formId}/versions/${versionId}`, {
       params: { tenant_id: tenantId },
     });
-  }  
+  }
 
   publishFormVersion(req: {
     tenant_id: number;
     id_form: number;
     id_form_version: number;
   }): Observable<any> {
-    // Requires a backend route: POST /api/forms/:id_form/versions/:id_form_version/publish?tenant_id=...
     return this.http.post(
       `${this.baseUrl}/forms/${req.id_form}/versions/${req.id_form_version}/publish`,
       null,
-      {
-        params: { tenant_id: req.tenant_id },
-      },
+      { params: { tenant_id: req.tenant_id } },
     );
+  }
+
+  // ------------------------------------------------------------
+  // Save Draft (create-or-update)
+  // ------------------------------------------------------------
+  saveDraftFormVersion(
+    tenantId: number,
+    formId: number,
+    payload: {
+      version_id?: number | null;
+      schema_json: any;
+      checksum_sha256?: string;
+    },
+  ): Observable<any> {
+    return this.http.post(`${this.baseUrl}/forms/${formId}/versions/draft`, {
+      tenant_id: tenantId,
+      version_id: payload.version_id ?? null,
+      schema_json: payload.schema_json,
+      checksum_sha256: payload.checksum_sha256,
+    });
   }
 
   createSubmission(req: {
@@ -112,18 +124,11 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/form-submissions`, req);
   }
 
-  saveSubmissionPayload(
-    submissionId: number,
-    tenantId: number,
-    payload: any,
-  ): Observable<any> {
-    return this.http.put(
-      `${this.baseUrl}/form-submissions/${submissionId}/payload`,
-      {
-        tenant_id: tenantId,
-        payload_json: payload,
-      },
-    );
+  saveSubmissionPayload(submissionId: number, tenantId: number, payload: any): Observable<any> {
+    return this.http.put(`${this.baseUrl}/form-submissions/${submissionId}/payload`, {
+      tenant_id: tenantId,
+      payload_json: payload,
+    });
   }
 
   uploadFile(

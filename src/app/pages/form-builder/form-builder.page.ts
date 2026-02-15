@@ -3,11 +3,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from 'src/app/services/api';
-import {
-  AlertController,
-  ModalController,
-  NavController,
-} from '@ionic/angular';
+import { AlertController, ModalController, NavController } from '@ionic/angular';
 import {
   IonBackButton,
   IonButton,
@@ -27,7 +23,7 @@ import {
   IonToolbar,
   ItemReorderEventDetail,
   IonInput,
-  IonTextarea, // ✅ FIX: necessário para <ion-textarea>
+  IonTextarea,
   IonSelect,
   IonSelectOption,
 } from '@ionic/angular/standalone';
@@ -38,6 +34,7 @@ import { ElementEditorModal } from './modals/element-editor.modal';
 import { FormPreviewModal } from './modals/form-preview.modal';
 
 type TabKey = 'meta' | 'structure' | 'versions';
+type DefaultLanguage = 'pt-PT' | 'pt-BR' | 'en-US' | 'es-ES';
 
 @Component({
   selector: 'app-form-builder',
@@ -47,7 +44,6 @@ type TabKey = 'meta' | 'structure' | 'versions';
   imports: [
     CommonModule,
     FormsModule,
-
     IonHeader,
     IonToolbar,
     IonTitle,
@@ -57,20 +53,15 @@ type TabKey = 'meta' | 'structure' | 'versions';
     IonContent,
     IonText,
     IonSpinner,
-
     IonList,
     IonItem,
     IonLabel,
-
     IonSegment,
     IonSegmentButton,
-
     IonInput,
-    IonTextarea, // ✅ FIX: necessário para <ion-textarea>
-
+    IonTextarea,
     IonSelect,
     IonSelectOption,
-
     IonReorderGroup,
     IonReorder,
   ],
@@ -80,41 +71,44 @@ export class FormBuilderPage implements OnInit, OnDestroy {
 
   tenantId = 1;
 
-  // ids
   idForm: number | null = null;
   idFormVersion: number | null = null;
 
   loading = false;
 
-  // UI state
   tab: TabKey = 'meta';
   errorMsg = '';
   infoMsg = '';
 
-  // Form meta
   formName = '';
   formDescription = '';
   formStatus: 'ACTIVE' | 'INACTIVE' = 'ACTIVE';
-  defaultLanguage: 'pt' | 'en' = 'pt';
 
-  // Version meta
+  // ✅ precisa bater com o HTML (pt-PT, pt-BR, en-US, es-ES)
+  defaultLanguage: DefaultLanguage = 'pt-PT';
+
   versionStatus: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' = 'DRAFT';
   versionNumber: number | null = null;
 
-  // Schema (editor)
   schema: FormSchema = {
     schema_version: 'v1',
     default_language: 'pt',
     sections: [
       {
         id: 'sec-1',
-        title: { pt: 'Seção 1', en: 'Section 1' },
+        title: {
+          pt: 'Seção 1',
+          en: 'Section 1',
+          'pt-PT': 'Seção 1',
+          'pt-BR': 'Seção 1',
+          'en-US': 'Section 1',
+          'es-ES': 'Sección 1',
+        } as any,
         elements: [],
       },
     ],
   };
 
-  // helpers
   get isNew(): boolean {
     return !this.idForm;
   }
@@ -123,7 +117,7 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     return this.schema.sections || [];
   }
 
-  selectedSectionIndex = 0;
+  selectedSectionIndex: number = 0;
 
   get currentSection(): FormSection | null {
     return this.sections?.[this.selectedSectionIndex] || null;
@@ -133,7 +127,6 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     return this.currentSection?.elements || [];
   }
 
-  // versions list
   versions: any[] = [];
 
   constructor(
@@ -148,7 +141,6 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     const id = this.route.snapshot.paramMap.get('id');
     this.idForm = id ? Number(id) : null;
 
-    // se vier com ?version=...
     const v = this.route.snapshot.queryParamMap.get('version');
     this.idFormVersion = v ? Number(v) : null;
 
@@ -161,10 +153,59 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   }
 
   // ---------------------------
-  // Meta handlers
+  // helpers
+  // ---------------------------
+  private normalizeDefaultLanguage(input: any): DefaultLanguage {
+    const s = (input ?? '').toString();
+    if (s === 'pt-PT' || s === 'pt-BR' || s === 'en-US' || s === 'es-ES') return s;
+    // se vier 'pt' ou 'en' do schema antigo
+    if (s === 'en') return 'en-US';
+    if (s === 'es') return 'es-ES';
+    return 'pt-PT';
+  }
+
+  private schemaLangKey(): 'pt' | 'en' | 'es' {
+    if (this.defaultLanguage.startsWith('pt')) return 'pt';
+    if (this.defaultLanguage.startsWith('es')) return 'es';
+    return 'en';
+  }
+
+  private ensureSectionTitleKeys(sec: any) {
+    const t = (sec?.title || {}) as any;
+
+    const pt = t['pt'] ?? t['pt-PT'] ?? t['pt-BR'] ?? '';
+    const en = t['en'] ?? t['en-US'] ?? '';
+    const es = t['es'] ?? t['es-ES'] ?? '';
+
+    // mantém pt/en (compatibilidade)
+    t['pt'] = pt || '';
+    t['en'] = en || '';
+    t['es'] = es || '';
+
+    // garante chaves usadas no HTML
+    t['pt-PT'] = t['pt-PT'] ?? pt ?? '';
+    t['pt-BR'] = t['pt-BR'] ?? pt ?? '';
+    t['en-US'] = t['en-US'] ?? en ?? '';
+    t['es-ES'] = t['es-ES'] ?? es ?? '';
+
+    sec.title = t;
+  }
+
+  private normalizeSchemaForUi() {
+    // Ajusta schema.default_language quando for 'pt'/'en' etc
+    const dl = (this.schema as any)?.default_language;
+    this.defaultLanguage = this.normalizeDefaultLanguage(dl);
+
+    // garante que cada seção tenha as chaves pt-PT / en-US etc, já que o HTML usa isso
+    for (const s of this.schema.sections || []) {
+      this.ensureSectionTitleKeys(s as any);
+    }
+  }
+
+  // ---------------------------
+  // Meta handlers (HTML usa)
   // ---------------------------
   setFormName(v: any) {
-    // ✅ FIX: evita trimLeft/trimStart (ES2019). Compatível com ES2018/ES5.
     this.formName = (v ?? '').toString().replace(/^\s+/, '');
   }
 
@@ -178,17 +219,19 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   }
 
   setDefaultLanguage(v: any) {
-    const val = (v ?? '').toString();
-    this.defaultLanguage = val === 'en' ? 'en' : 'pt';
-    this.schema.default_language = this.defaultLanguage;
+    this.defaultLanguage = this.normalizeDefaultLanguage(v);
+
+    // guarda no schema também (compat: salva key curta pt/en/es)
+    const key = this.schemaLangKey();
+    (this.schema as any).default_language = key;
+
+    // garante chaves em todas as seções
+    this.normalizeSchemaForUi();
   }
 
   setTab(v: any) {
     const val = (v ?? '').toString() as TabKey;
-    this.tab =
-      val === 'meta' || val === 'structure' || val === 'versions'
-        ? val
-        : 'meta';
+    this.tab = val === 'meta' || val === 'structure' || val === 'versions' ? val : 'meta';
   }
 
   // ---------------------------
@@ -201,25 +244,24 @@ export class FormBuilderPage implements OnInit, OnDestroy {
 
     try {
       if (!this.idForm) {
-        // novo form: fica em meta/estrutura e aguarda "Criar"
         this.tab = 'meta';
+        this.normalizeSchemaForUi();
         return;
       }
 
-      // Carrega lista de versões
       await this.refreshVersions();
 
-      // Se tiver idFormVersion usa, senão tenta usar o draft mais recente ou published
       if (this.idFormVersion) {
         await this.loadVersion(this.idFormVersion);
       } else if (this.versions?.length) {
-        // preferir DRAFT
         const draft = this.versions.find((x) => x.status === 'DRAFT');
         const pick = draft || this.versions[0];
         if (pick?.id_form_version) {
           await this.loadVersion(Number(pick.id_form_version));
         }
       }
+
+      this.normalizeSchemaForUi();
     } catch (e: any) {
       this.errorMsg = e?.message || 'Erro ao carregar form.';
     } finally {
@@ -231,12 +273,9 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     if (!this.idForm) return;
 
     const list = await firstValueFrom(
-      this.api
-        .listFormVersions(this.idForm, this.tenantId)
-        .pipe(takeUntil(this.destroy$)),
+      this.api.listFormVersions(this.tenantId, this.idForm).pipe(takeUntil(this.destroy$)),
     );
 
-    // list pode vir array ou {items: []}
     const anyList: any = list as any;
     this.versions = Array.isArray(anyList) ? anyList : anyList?.items || [];
   }
@@ -245,9 +284,7 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     if (!this.idForm) return;
 
     const version = await firstValueFrom(
-      this.api
-        .getFormVersion(this.idForm, idFormVersion, this.tenantId)
-        .pipe(takeUntil(this.destroy$)),
+      this.api.getFormVersion(this.idForm, idFormVersion, this.tenantId).pipe(takeUntil(this.destroy$)),
     );
 
     const v: any = version || {};
@@ -255,15 +292,12 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     this.versionStatus = v.status || 'DRAFT';
     this.versionNumber = v.version_number ?? null;
 
-    // schema_json pode vir como string JSON
     const schemaJson = v.schema_json;
-    const parsed =
-      typeof schemaJson === 'string' ? JSON.parse(schemaJson) : schemaJson;
+    const parsed = typeof schemaJson === 'string' ? JSON.parse(schemaJson) : schemaJson;
+
     if (parsed) {
       this.schema = parsed as FormSchema;
-      // garante coerência
-      this.defaultLanguage =
-        this.schema.default_language === 'en' ? 'en' : 'pt';
+      this.normalizeSchemaForUi();
       this.selectedSectionIndex = 0;
     }
   }
@@ -274,7 +308,7 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   }
 
   // ---------------------------
-  // Sections
+  // Sections (HTML usa)
   // ---------------------------
   selectSection(i: number) {
     this.selectedSectionIndex = i;
@@ -284,21 +318,28 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     if (this.versionStatus !== 'DRAFT') return;
 
     const newId = `sec-${Date.now()}`;
-    this.schema.sections = [
-      ...(this.schema.sections || []),
-      {
-        id: newId,
-        title: { pt: 'Nova Seção', en: 'New Section' },
-        elements: [],
-      },
-    ];
+    const n = (this.schema.sections?.length || 0) + 1;
 
+    const sec: any = {
+      id: newId,
+      title: {
+        pt: `Seção ${n}`,
+        en: `Section ${n}`,
+      },
+      elements: [],
+    };
+
+    this.ensureSectionTitleKeys(sec);
+
+    this.schema.sections = [...(this.schema.sections || []), sec];
     this.selectedSectionIndex = this.schema.sections.length - 1;
   }
 
   async renameSection(i: number) {
-    const s = this.schema.sections?.[i];
+    const s: any = this.schema.sections?.[i];
     if (!s) return;
+
+    this.ensureSectionTitleKeys(s);
 
     const alert = await this.alertCtrl.create({
       header: 'Renomear seção',
@@ -321,7 +362,16 @@ export class FormBuilderPage implements OnInit, OnDestroy {
         {
           text: 'Salvar',
           handler: (data: any) => {
-            s.title = { pt: data.pt || '', en: data.en || '' };
+            const pt = (data?.pt ?? '').toString();
+            const en = (data?.en ?? '').toString();
+
+            s.title = {
+              ...(s.title || {}),
+              pt,
+              en,
+            };
+
+            this.ensureSectionTitleKeys(s);
           },
         },
       ],
@@ -351,7 +401,7 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   }
 
   // ---------------------------
-  // Elements
+  // Elements (HTML usa)
   // ---------------------------
   isField(el: any): boolean {
     return el?.type === 'FIELD';
@@ -367,9 +417,11 @@ export class FormBuilderPage implements OnInit, OnDestroy {
 
   staticText(el: any): string {
     if (!el) return '';
-    if (el.type === 'TITLE') return el.text?.[this.defaultLanguage] || '';
-    if (el.type === 'SUBTITLE') return el.text?.[this.defaultLanguage] || '';
-    if (el.type === 'TEXT_BLOCK') return el.text?.[this.defaultLanguage] || '';
+    const lang = this.defaultLanguage;
+
+    if (el.type === 'TITLE' || el.type === 'SUBTITLE' || el.type === 'TEXT_BLOCK') {
+      return el.text?.[lang] || el.text?.['pt-PT'] || el.text?.['pt'] || '';
+    }
     if (el.type === 'IMAGE_DECORATIVE') return `IMAGE: ${el.url || ''}`;
     if (el.type === 'DIVIDER') return 'DIVIDER';
     return el.type || '';
@@ -420,27 +472,20 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     if (!res?.data) return;
 
     const updated = res.data;
-    if (index === null) {
-      sec.elements.push(updated);
-    } else {
-      sec.elements[index] = updated;
-    }
+    if (index === null) sec.elements.push(updated);
+    else sec.elements[index] = updated;
   }
 
   // ---------------------------
-  // Actions (save/publish/preview)
+  // Preview / Create / Save Draft / Clone Draft
   // ---------------------------
   async preview() {
-    // normaliza idioma: no builder geralmente é 'pt' | 'en'
-    const lang = this.defaultLanguage === 'en' ? 'en-US' : 'pt-PT';
-
     const modal = await this.modalCtrl.create({
       component: FormPreviewModal,
       componentProps: {
-        schema: this.schema, // <-- importante (preview por seção)
-        initialSectionIndex: this.selectedSectionIndex ?? 0,
-        defaultLanguage: lang,
-        // elements: this.schema?.sections?.flatMap((s: any) => s.elements ?? []) ?? [], // opcional (fallback)
+        schema: this.schema,
+        initialSectionIndex: this.selectedSectionIndex,
+        defaultLanguage: this.defaultLanguage,
       },
     });
 
@@ -455,6 +500,9 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     this.infoMsg = '';
 
     try {
+      // garante coerência do schema antes de salvar
+      this.normalizeSchemaForUi();
+
       const created = await firstValueFrom(
         this.api
           .createForm({
@@ -483,9 +531,7 @@ export class FormBuilderPage implements OnInit, OnDestroy {
           .pipe(takeUntil(this.destroy$)),
       );
 
-      this.idFormVersion = Number(
-        (createdV as any)?.id_form_version || (createdV as any)?.id,
-      );
+      this.idFormVersion = Number((createdV as any)?.id_form_version || (createdV as any)?.id);
       this.versionStatus = 'DRAFT';
 
       await this.refreshVersions();
@@ -499,16 +545,60 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   }
 
   async saveDraft() {
-    // Mantive aqui como estava na sua base (se você já adaptou as assinaturas, ok)
-    // Se sua ApiService tiver updateForm/updateFormVersion, conecte aqui.
-    this.infoMsg = 'Salvar rascunho ainda não foi ligado na sua ApiService.';
+    if (this.loading) return;
+
+    this.errorMsg = '';
+    this.infoMsg = '';
+    this.loading = true;
+
+    try {
+      // garante coerência do schema antes de salvar
+      this.normalizeSchemaForUi();
+
+      if (!this.idForm) {
+        if (!this.formName?.trim()) {
+          this.errorMsg = 'Informe o nome do formulário antes de salvar.';
+          return;
+        }
+        await this.createNewFormAndDraft();
+        return;
+      }
+
+      const schemaString = JSON.stringify(this.schema);
+      const checksum = await this.computeSha256(schemaString);
+
+      const saved = await firstValueFrom(
+        this.api
+          .saveDraftFormVersion(this.tenantId, this.idForm, {
+            version_id: this.idFormVersion ?? null,
+            schema_json: this.schema,
+            checksum_sha256: checksum || undefined,
+          })
+          .pipe(takeUntil(this.destroy$)),
+      );
+
+      this.idFormVersion = Number(saved?.id_form_version || saved?.id);
+      this.versionStatus = (saved?.status || 'DRAFT') as any;
+      this.versionNumber = saved?.version_number ?? this.versionNumber;
+
+      await this.refreshVersions();
+      this.infoMsg = 'Rascunho salvo com sucesso.';
+      this.tab = 'structure';
+    } catch (e: any) {
+      const msg = e?.error?.error || e?.error?.message || e?.message || 'Erro ao salvar rascunho.';
+      this.errorMsg = msg;
+    } finally {
+      this.loading = false;
+    }
   }
 
   async publish() {
-    this.infoMsg = 'Publicar ainda não foi ligado na sua ApiService.';
+    this.infoMsg = 'Publicar ainda não foi ligado aqui (você já tem endpoint no backend).';
   }
 
+  // ✅ ESTE ERA O MÉTODO QUE FALTAVA (HTML chama no tab "versions")
   async createNewDraftFromCurrent() {
+    if (this.loading) return;
     if (!this.idForm) return;
 
     this.loading = true;
@@ -516,6 +606,9 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     this.infoMsg = '';
 
     try {
+      // garante coerência do schema antes de clonar
+      this.normalizeSchemaForUi();
+
       const createdV = await firstValueFrom(
         this.api
           .createFormVersion({
@@ -527,18 +620,29 @@ export class FormBuilderPage implements OnInit, OnDestroy {
           .pipe(takeUntil(this.destroy$)),
       );
 
-      this.idFormVersion = Number(
-        (createdV as any)?.id_form_version || (createdV as any)?.id,
-      );
+      this.idFormVersion = Number((createdV as any)?.id_form_version || (createdV as any)?.id);
       this.versionStatus = 'DRAFT';
+      this.versionNumber = (createdV as any)?.version_number ?? this.versionNumber;
 
       await this.refreshVersions();
-      this.infoMsg = 'Novo rascunho criado a partir da versão atual.';
+      this.infoMsg = 'Nova versão DRAFT criada (clonada da atual).';
       this.tab = 'structure';
     } catch (e: any) {
-      this.errorMsg = e?.message || 'Erro ao criar novo rascunho.';
+      const msg = e?.error?.error || e?.error?.message || e?.message || 'Erro ao criar novo rascunho.';
+      this.errorMsg = msg;
     } finally {
       this.loading = false;
+    }
+  }
+
+  private async computeSha256(text: string): Promise<string> {
+    try {
+      const data = new TextEncoder().encode(text);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+      return '';
     }
   }
 }

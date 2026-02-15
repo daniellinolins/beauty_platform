@@ -1,5 +1,14 @@
 export type LocalizedText = Record<string, string>;
 
+/**
+ * Supported language codes used by the Form Builder UI.
+ *
+ * Notes:
+ * - The builder sometimes stores short codes ("pt" | "en").
+ * - The mobile UI often uses locale codes ("pt-PT" | "en-US").
+ */
+export type UiLang = 'pt' | 'en' | 'pt-PT' | 'pt-BR' | 'en-US' | 'en-GB';
+
 export type InputType =
   | 'TEXT'
   | 'TEXTAREA'

@@ -431,12 +431,16 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   // Actions (save/publish/preview)
   // ---------------------------
   async preview() {
+    // normaliza idioma: no builder geralmente é 'pt' | 'en'
+    const lang = this.defaultLanguage === 'en' ? 'en-US' : 'pt-PT';
+
     const modal = await this.modalCtrl.create({
       component: FormPreviewModal,
       componentProps: {
-        schema: this.schema,
-        sectionIndex: this.selectedSectionIndex ?? 0,
-        defaultLanguage: this.defaultLanguage,
+        schema: this.schema, // <-- importante (preview por seção)
+        initialSectionIndex: this.selectedSectionIndex ?? 0,
+        defaultLanguage: lang,
+        // elements: this.schema?.sections?.flatMap((s: any) => s.elements ?? []) ?? [], // opcional (fallback)
       },
     });
 

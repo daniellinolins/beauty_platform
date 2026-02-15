@@ -25,6 +25,7 @@ import {
   FieldOption,
   FormElement,
   LocalizedText,
+  UiLang,
 } from './form-renderer.types';
 
 @Component({
@@ -56,7 +57,22 @@ export class FormRendererComponent {
   @Input() mode: 'fill' | 'preview' | 'edit' = 'fill';
 
   @Input() tenantId: number = 1;
-  @Input() defaultLang: string = 'pt-PT';
+
+  /**
+   * Preferred UI language/locale.
+   *
+   * The builder/preview may send either locale codes ("pt-PT" | "en-US")
+   * or short language codes ("pt" | "en").
+   *
+   * Keep this input for backward compatibility.
+   */
+  @Input() defaultLang: UiLang | string = 'pt-PT';
+
+  /**
+   * Optional legacy/alternative language input.
+   * If provided, it takes precedence over `defaultLang`.
+   */
+  @Input() language?: UiLang | string;
 
   @Input() elements: FormElement[] = [];
   @Input() payload: Record<string, any> = {};
@@ -136,9 +152,59 @@ export class FormRendererComponent {
     return !!((e as any).rules && (e as any).rules.required);
   }
 
+  /**
+   * Robust localized text resolver.
+   * Supports keys like: pt/en, pt-PT/pt-BR, en-US/en-GB, etc.
+   */
   getTextLocalized(t: LocalizedText | null | undefined): string {
     if (!t) return '';
-    return t[this.defaultLang] || t['pt-PT'] || t['pt-BR'] || Object.values(t)[0] || '';
+
+    // 1) Try preferred language keys (ordered)
+    for (const k of this.getPreferredLangKeys()) {
+      const v = t[k];
+      if (typeof v === 'string' && v.trim().length) return v;
+    }
+
+    // 2) Try a few common fallbacks explicitly
+    const commonFallbacks = ['pt', 'pt-PT', 'pt-BR', 'en', 'en-US', 'en-GB'];
+    for (const k of commonFallbacks) {
+      const v = t[k];
+      if (typeof v === 'string' && v.trim().length) return v;
+    }
+
+    // 3) Last resort: first non-empty value
+    for (const v of Object.values(t)) {
+      if (typeof v === 'string' && v.trim().length) return v;
+    }
+    return '';
+  }
+
+  /**
+   * Preferred key order derived from `language` (if provided) or `defaultLang`.
+   */
+  private getPreferredLangKeys(): string[] {
+    const raw = (this.language ?? this.defaultLang ?? '').toString().trim();
+    const s = raw.toLowerCase();
+
+    // Normalize some common variations
+    const normalized = s.replace('_', '-');
+    const base = normalized.split('-')[0];
+
+    // Always try the exact raw value first
+    const keys: string[] = [];
+    if (raw) keys.push(raw);
+    if (normalized && normalized !== raw) keys.push(normalized);
+
+    // Expand by language family
+    if (base === 'en') {
+      keys.push('en-US', 'en-GB', 'en');
+    } else if (base === 'pt') {
+      keys.push('pt-PT', 'pt-BR', 'pt');
+    } else if (base) {
+      keys.push(base);
+    }
+
+    return Array.from(new Set(keys)).filter(Boolean);
   }
 
   // -------------------------

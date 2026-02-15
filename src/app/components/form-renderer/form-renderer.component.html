@@ -1,38 +1,41 @@
 <div *ngIf="elements && elements.length > 0">
   <ng-container *ngFor="let e of elements">
-
-    <h1 *ngIf="isTitle(e)" style="margin-top: 12px;">
+    <h1 *ngIf="isTitle(e)" style="margin-top: 12px">
       {{ getTextLocalized(getStaticText(e)) }}
     </h1>
 
-    <h2 *ngIf="isSubtitle(e)" style="margin-top: 12px;">
+    <h2 *ngIf="isSubtitle(e)" style="margin-top: 12px">
       {{ getTextLocalized(getStaticText(e)) }}
     </h2>
 
-    <p *ngIf="isTextBlock(e)" style="white-space: pre-wrap; margin-top: 10px;">
+    <p *ngIf="isTextBlock(e)" style="white-space: pre-wrap; margin-top: 10px">
       {{ getTextLocalized(getStaticText(e)) }}
     </p>
 
     <!-- IMAGE_DECORATIVE -->
-    <div *ngIf="isImage(e)" style="margin-top: 12px;">
+    <div *ngIf="isImage(e)" style="margin-top: 12px">
       <img
         [src]="getImageUrl(e)"
         [alt]="getTextLocalized(getImageAlt(e))"
-        style="width: 100%; border-radius: 10px; border: 1px solid #e0e0e0;"
+        style="width: 100%; border-radius: 10px; border: 1px solid #e0e0e0"
       />
-      <div *ngIf="getTextLocalized(getImageAlt(e))" style="font-size: 12px; opacity: .75; margin-top: 6px;">
+      <div
+        *ngIf="getTextLocalized(getImageAlt(e))"
+        style="font-size: 12px; opacity: 0.75; margin-top: 6px"
+      >
         {{ getTextLocalized(getImageAlt(e)) }}
       </div>
     </div>
 
-    <hr *ngIf="isDivider(e)" style="margin: 16px 0;" />
+    <hr *ngIf="isDivider(e)" style="margin: 16px 0" />
 
     <!-- FIELD -->
     <div *ngIf="isField(e)">
-
       <!-- TEXT -->
       <ion-item *ngIf="getInputType(e) === 'TEXT'">
-        <ion-label position="stacked">{{ getTextLocalized(getLabel(e)) }}</ion-label>
+        <ion-label position="stacked">{{
+          getTextLocalized(getLabel(e))
+        }}</ion-label>
         <ion-input
           [disabled]="mode === 'preview'"
           [readonly]="mode === 'preview'"
@@ -43,7 +46,9 @@
 
       <!-- TEXTAREA -->
       <ion-item *ngIf="getInputType(e) === 'TEXTAREA'">
-        <ion-label position="stacked">{{ getTextLocalized(getLabel(e)) }}</ion-label>
+        <ion-label position="stacked">{{
+          getTextLocalized(getLabel(e))
+        }}</ion-label>
         <ion-textarea
           [disabled]="mode === 'preview'"
           [readonly]="mode === 'preview'"
@@ -55,26 +60,33 @@
 
       <!-- NUMBER -->
       <ion-item *ngIf="getInputType(e) === 'NUMBER'">
-        <ion-label position="stacked">{{ getTextLocalized(getLabel(e)) }}</ion-label>
+        <ion-label position="stacked">{{
+          getTextLocalized(getLabel(e))
+        }}</ion-label>
         <ion-input
           type="number"
           [disabled]="mode === 'preview'"
           [readonly]="mode === 'preview'"
-          [value]="getPayloadValue(getKey(e)) != null ? getPayloadValue(getKey(e)) : ''"
+          [value]="
+            getPayloadValue(getKey(e)) != null ? getPayloadValue(getKey(e)) : ''
+          "
           (ionInput)="setPayloadValue(getKey(e), $event.detail.value)"
         ></ion-input>
       </ion-item>
 
       <!-- DATE -->
-      <div *ngIf="getInputType(e) === 'DATE'" style="margin-top: 6px;">
+      <div *ngIf="getInputType(e) === 'DATE'" style="margin-top: 6px">
         <ion-item>
           <ion-label>{{ getTextLocalized(getLabel(e)) }}</ion-label>
-          <ion-datetime-button [disabled]="mode === 'preview'" datetime="dt_{{getKey(e)}}"></ion-datetime-button>
+          <ion-datetime-button
+            [disabled]="mode === 'preview'"
+            datetime="dt_{{ getKey(e) }}"
+          ></ion-datetime-button>
         </ion-item>
         <ion-modal [keepContentsMounted]="true">
           <ng-template>
             <ion-datetime
-              id="dt_{{getKey(e)}}"
+              id="dt_{{ getKey(e) }}"
               presentation="date"
               [disabled]="mode === 'preview'"
               [value]="getPayloadValue(getKey(e))"
@@ -95,9 +107,11 @@
       </ion-item>
 
       <!-- SINGLE_CHOICE -->
-      <div *ngIf="getInputType(e) === 'SINGLE_CHOICE'" style="margin-top: 8px;">
+      <div *ngIf="getInputType(e) === 'SINGLE_CHOICE'" style="margin-top: 8px">
         <ion-item lines="none">
-          <ion-label position="stacked">{{ getTextLocalized(getLabel(e)) }}</ion-label>
+          <ion-label position="stacked">{{
+            getTextLocalized(getLabel(e))
+          }}</ion-label>
         </ion-item>
         <ion-list>
           <ion-radio-group
@@ -117,9 +131,11 @@
       </div>
 
       <!-- MULTI_CHOICE -->
-      <div *ngIf="getInputType(e) === 'MULTI_CHOICE'" style="margin-top: 8px;">
+      <div *ngIf="getInputType(e) === 'MULTI_CHOICE'" style="margin-top: 8px">
         <ion-item lines="none">
-          <ion-label position="stacked">{{ getTextLocalized(getLabel(e)) }}</ion-label>
+          <ion-label position="stacked">{{
+            getTextLocalized(getLabel(e))
+          }}</ion-label>
         </ion-item>
         <ion-list>
           <ion-item *ngFor="let opt of getOptions(e)">
@@ -128,7 +144,9 @@
               slot="end"
               [disabled]="mode === 'preview'"
               [checked]="isCheckedMulti(getKey(e), opt.value)"
-              (ionChange)="toggleMulti(getKey(e), opt.value, $event.detail.checked)"
+              (ionChange)="
+                toggleMulti(getKey(e), opt.value, $event.detail.checked)
+              "
             ></ion-checkbox>
           </ion-item>
         </ion-list>
@@ -136,22 +154,29 @@
 
       <!-- SELECT -->
       <ion-item *ngIf="getInputType(e) === 'SELECT'">
-        <ion-label position="stacked">{{ getTextLocalized(getLabel(e)) }}</ion-label>
+        <ion-label position="stacked">{{
+          getTextLocalized(getLabel(e))
+        }}</ion-label>
         <ion-select
           [disabled]="mode === 'preview'"
           [value]="getPayloadValue(getKey(e))"
           (ionChange)="setPayloadValue(getKey(e), $event.detail.value)"
         >
-          <ion-select-option *ngFor="let opt of getOptions(e)" [value]="opt.value">
+          <ion-select-option
+            *ngFor="let opt of getOptions(e)"
+            [value]="opt.value"
+          >
             {{ getTextLocalized(opt.label) }}
           </ion-select-option>
         </ion-select>
       </ion-item>
 
       <!-- PHOTO -->
-      <div *ngIf="getInputType(e) === 'PHOTO'" style="margin-top: 10px;">
+      <div *ngIf="getInputType(e) === 'PHOTO'" style="margin-top: 10px">
         <ion-item lines="none">
-          <ion-label position="stacked">{{ getTextLocalized(getLabel(e)) }}</ion-label>
+          <ion-label position="stacked">{{
+            getTextLocalized(getLabel(e))
+          }}</ion-label>
         </ion-item>
         <app-photo-capture
           [disabled]="mode === 'preview'"
@@ -162,23 +187,26 @@
       </div>
 
       <!-- SIGNATURE -->
-      <div *ngIf="getInputType(e) === 'SIGNATURE'" style="margin-top: 10px;">
+      <div *ngIf="getInputType(e) === 'SIGNATURE'" style="margin-top: 10px">
         <ion-item lines="none">
-          <ion-label position="stacked">{{ getTextLocalized(getLabel(e)) }}</ion-label>
+          <ion-label position="stacked">{{
+            getTextLocalized(getLabel(e))
+          }}</ion-label>
         </ion-item>
+
         <app-signature-pad
           [disabled]="mode === 'preview'"
           [tenantId]="tenantId"
+          [category]="'signatures'"
+          [purpose]="getKey(e) || 'signature'"
           [value]="getPayloadValue(getKey(e))"
           (valueChange)="setPayloadValue(getKey(e), $event)"
         ></app-signature-pad>
       </div>
-
     </div>
-
   </ng-container>
 </div>
 
-<div *ngIf="!elements || elements.length === 0" style="opacity:.7;">
+<div *ngIf="!elements || elements.length === 0" style="opacity: 0.7">
   Nenhum elemento no formulário.
 </div>

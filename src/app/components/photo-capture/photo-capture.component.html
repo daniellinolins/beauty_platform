@@ -8,11 +8,17 @@
     <img [src]="previewUrl" alt="Foto" />
   </div>
 
-  <div class="pc-empty" *ngIf="!previewUrl" (click)="captureFromCamera()" [class.disabled]="disabled || uploading">
+  <button
+    type="button"
+    class="pc-empty"
+    *ngIf="!previewUrl"
+    (click)="captureFromCamera()"
+    [disabled]="disabled || uploading"
+  >
     <ion-icon name="camera-outline"></ion-icon>
     <div class="pc-empty-title">Tocar para capturar</div>
     <div class="pc-empty-sub">Câmera</div>
-  </div>
+  </button>
 
   <div class="pc-actions">
     <ion-button expand="block" (click)="captureFromCamera()" [disabled]="disabled || uploading">
@@ -35,12 +41,12 @@
     </ion-button>
   </div>
 
-  <!-- Web file input fallback -->
   <input
     [id]="fileInputId"
     class="pc-file-input"
     type="file"
     accept="image/*"
+    capture="environment"
     (change)="onFilePicked($event)"
   />
 

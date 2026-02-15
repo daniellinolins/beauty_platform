@@ -1,10 +1,55 @@
-<div class="sig-wrap">
-  <canvas
-    #canvas
-    class="sig-canvas"
-    (pointerdown)="onPointerDown($event)"
-    (pointermove)="onPointerMove($event)"
-    (pointerup)="onPointerUp($event)"
-    (pointercancel)="onPointerUp($event)"
-  ></canvas>
+<div class="sig-root">
+  <!-- Preview da assinatura salva -->
+  <div class="sig-preview" *ngIf="previewUrl && !showCanvas">
+    <img [src]="previewUrl" alt="Assinatura" />
+  </div>
+
+  <!-- Canvas de assinatura -->
+  <div class="sig-wrap" *ngIf="showCanvas">
+    <canvas
+      #canvas
+      class="sig-canvas"
+      (pointerdown)="onPointerDown($event)"
+      (pointermove)="onPointerMove($event)"
+      (pointerup)="onPointerUp($event)"
+      (pointercancel)="onPointerUp($event)"
+    ></canvas>
+  </div>
+
+  <!-- Ações -->
+  <div class="sig-actions" *ngIf="!disabled">
+    <ion-button expand="block" (click)="saveSignature()" [disabled]="uploading || disabled">
+      Salvar assinatura
+    </ion-button>
+
+    <ion-button expand="block" fill="outline" (click)="clearCanvas()" [disabled]="uploading || disabled || !showCanvas">
+      Limpar
+    </ion-button>
+
+    <ion-button
+      expand="block"
+      fill="clear"
+      color="danger"
+      (click)="resetValue()"
+      [disabled]="uploading || disabled"
+      *ngIf="value"
+    >
+      Redefinir assinatura
+    </ion-button>
+
+    <ion-button
+      expand="block"
+      fill="outline"
+      (click)="signAgain()"
+      [disabled]="uploading || disabled"
+      *ngIf="previewUrl && !showCanvas"
+    >
+      Assinar novamente
+    </ion-button>
+  </div>
+
+  <div class="sig-uploading" *ngIf="uploading">
+    <ion-spinner name="crescent"></ion-spinner>
+    <span>Salvando...</span>
+  </div>
 </div>

@@ -1,49 +1,55 @@
-<ion-header>
-  <ion-toolbar>
-    <ion-title>{{ title }}</ion-title>
-    <ion-buttons slot="end">
-      <ion-button (click)="cancel()">Fechar</ion-button>
-    </ion-buttons>
-  </ion-toolbar>
-</ion-header>
-
-<ion-content class="ion-padding">
-  <p class="hint">{{ hint }}</p>
-
-  <ion-text color="danger" *ngIf="errMsg">
-    <p>{{ errMsg }}</p>
-  </ion-text>
-
-  <ion-button expand="block" (click)="takePhoto()" [disabled]="disabled">
-    Abrir câmera
-  </ion-button>
-
-  <div *ngIf="!platform.is('hybrid')" style="margin-top: 12px;">
-    <input
-      type="file"
-      accept="image/*"
-      capture="environment"
-      (change)="onFilePicked($event)"
-      [disabled]="disabled"
-    />
+<div class="pc-root">
+  <div class="pc-label" *ngIf="title || hint">
+    <div class="pc-title" *ngIf="title">{{ title }}</div>
+    <div class="pc-hint" *ngIf="hint">{{ hint }}</div>
   </div>
 
-  <ion-card class="preview-card" *ngIf="previewUrl">
-    <img [src]="previewUrl" alt="Pré-visualização" />
-  </ion-card>
+  <div class="pc-preview" *ngIf="previewUrl">
+    <img [src]="previewUrl" alt="Foto" />
+  </div>
 
-  <ion-grid>
-    <ion-row>
-      <ion-col size="6">
-        <ion-button expand="block" color="medium" (click)="clear()" [disabled]="disabled">
-          Limpar
-        </ion-button>
-      </ion-col>
-      <ion-col size="6">
-        <ion-button expand="block" (click)="save()" [disabled]="disabled || !blob">
-          Guardar
-        </ion-button>
-      </ion-col>
-    </ion-row>
-  </ion-grid>
-</ion-content>
+  <div class="pc-empty" *ngIf="!previewUrl" (click)="captureFromCamera()" [class.disabled]="disabled || uploading">
+    <ion-icon name="camera-outline"></ion-icon>
+    <div class="pc-empty-title">Tocar para capturar</div>
+    <div class="pc-empty-sub">Câmera</div>
+  </div>
+
+  <div class="pc-actions">
+    <ion-button expand="block" (click)="captureFromCamera()" [disabled]="disabled || uploading">
+      Capturar foto
+    </ion-button>
+
+    <ion-button expand="block" fill="outline" (click)="pickFromGallery()" [disabled]="disabled || uploading">
+      Escolher da galeria
+    </ion-button>
+
+    <ion-button
+      *ngIf="hasValue"
+      expand="block"
+      color="danger"
+      fill="clear"
+      (click)="remove()"
+      [disabled]="disabled || uploading"
+    >
+      Remover
+    </ion-button>
+  </div>
+
+  <!-- Web file input fallback -->
+  <input
+    [id]="fileInputId"
+    class="pc-file-input"
+    type="file"
+    accept="image/*"
+    (change)="onFilePicked($event)"
+  />
+
+  <div class="pc-uploading" *ngIf="uploading">
+    <ion-spinner name="crescent"></ion-spinner>
+    <span>Enviando...</span>
+  </div>
+
+  <ion-text color="danger" *ngIf="errMsg">
+    <p class="pc-error">{{ errMsg }}</p>
+  </ion-text>
+</div>

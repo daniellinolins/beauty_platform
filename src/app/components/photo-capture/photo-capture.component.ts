@@ -1,22 +1,22 @@
 import { CommonModule } from '@angular/common';
-import {
-  Component,
-  EventEmitter,
-  Input,
-  Optional,
-  Output,
-} from '@angular/core';
-import { IonicModule, ModalController, Platform } from '@ionic/angular';
-import {
-  Camera,
-  CameraResultType,
-  CameraSource,
-} from '@capacitor/camera';
+import { Component, EventEmitter, Input, Optional, Output } from '@angular/core';
+import { IonicModule, ModalController, Platform, ToastController } from '@ionic/angular';
+import { Camera, CameraResultType, CameraSource, Photo } from '@capacitor/camera';
+import { ApiService } from 'src/app/services/api';
 
 export type PhotoCaptureResult =
-  | { ok: true; blob: Blob; mime_type: string }
+  | { ok: true; id_file_object?: number; url?: string; mime_type?: string }
   | { ok: false; error?: string };
 
+/**
+ * Inline photo capture component (mobile-first).
+ *
+ * - Hybrid: uses Capacitor Camera
+ * - Web: uses file input (and can also use Capacitor Photos on hybrid)
+ *
+ * It uploads the image to backend (/api/files) and stores a JSON-friendly
+ * reference (url or {id_file_object,url}) into `value`.
+ */
 @Component({
   selector: 'app-photo-capture',
   standalone: true,
@@ -25,104 +25,222 @@ export type PhotoCaptureResult =
   styleUrls: ['./photo-capture.component.scss'],
 })
 export class PhotoCaptureComponent {
-  @Input() title = 'Capturar foto';
-  @Input() hint = 'Tire uma foto nítida.';
+  // Optional labels (kept for backward compatibility)
+  @Input() title = 'Foto';
+  @Input() hint = '';
 
-  // ✅ Compat p/ uso embutido no renderer (não quebra o uso modal atual)
+  // Renderer compatibility
   @Input() disabled: boolean = false;
   @Input() tenantId: number = 1;
+
+  /** Category/purpose used by /api/files */
+  @Input() category: string = 'FORM_SUBMISSION';
+  @Input() purpose: string = 'photo';
+
+  /** Stored value (JSON friendly): url string, id number, or object {id_file_object,url} */
   @Input() value: any = null;
   @Output() valueChange = new EventEmitter<any>();
 
+  // Optional legacy outputs (if used as modal somewhere)
   @Output() done = new EventEmitter<PhotoCaptureResult>();
   @Output() cancelled = new EventEmitter<void>();
 
+  previewUrl: string | null = null;
+  uploading = false;
+  errMsg: string | null = null;
+
   constructor(
     public platform: Platform,
+    private api: ApiService,
+    private toastCtrl: ToastController,
     @Optional() private modalCtrl?: ModalController
   ) {}
 
-  previewUrl: string | null = null;
-  blob: Blob | null = null;
-  mimeType = 'image/jpeg';
-  errMsg: string | null = null;
+  ngOnInit() {
+    this.syncPreviewFromValue();
+  }
 
-  async takePhoto() {
-    if (this.disabled) return;
+  ngOnChanges() {
+    this.syncPreviewFromValue();
+  }
+
+  private syncPreviewFromValue() {
+    const v: any = this.value;
+    if (!v) {
+      this.previewUrl = null;
+      return;
+    }
+    if (typeof v === 'string') {
+      this.previewUrl = v;
+      return;
+    }
+    if (typeof v === 'object') {
+      this.previewUrl = v.url || v.file_url || v.public_url || v.path || null;
+      return;
+    }
+    // number id: no url known
+    this.previewUrl = null;
+  }
+
+  get hasValue(): boolean {
+    return !!this.value;
+  }
+
+  get fileInputId(): string {
+    return `pc_file_${this.purpose}`.replace(/[^a-zA-Z0-9_\-]/g, '_');
+  }
+
+  async captureFromCamera() {
+    if (this.disabled || this.uploading) return;
 
     this.errMsg = null;
 
     try {
+      this.uploading = true;
+
       const photo = await Camera.getPhoto({
-        quality: 85,
+        quality: 80,
         allowEditing: false,
         resultType: CameraResultType.Uri,
         source: CameraSource.Camera,
       });
 
-      const webPath = photo.webPath;
-      if (!webPath) {
-        this.errMsg = 'Não foi possível obter a foto.';
-        return;
-      }
+      const blob = await this.photoToBlob(photo);
+      const filename = this.buildFilename('camera');
 
-      const res = await fetch(webPath);
-      const blob = await res.blob();
-
-      this.blob = blob;
-      this.mimeType = blob.type || 'image/jpeg';
-      this.previewUrl = webPath;
+      await this.uploadAndSetValue(blob, filename);
     } catch (e: any) {
       if (String(e?.message || e).toLowerCase().includes('cancel')) return;
-      this.errMsg = 'Erro ao capturar foto.';
       console.error(e);
+      this.errMsg = 'Erro ao capturar/enviar foto.';
+      await this.toast(this.errMsg, 'danger');
+    } finally {
+      this.uploading = false;
+    }
+  }
+
+  async pickFromGallery() {
+    if (this.disabled || this.uploading) return;
+
+    this.errMsg = null;
+
+    // Web: open file picker
+    if (!this.platform.is('hybrid')) {
+      const input = document.getElementById(this.fileInputId) as HTMLInputElement | null;
+      input?.click();
+      return;
+    }
+
+    // Hybrid: open Photos
+    try {
+      this.uploading = true;
+
+      const photo = await Camera.getPhoto({
+        quality: 80,
+        allowEditing: false,
+        resultType: CameraResultType.Uri,
+        source: CameraSource.Photos,
+      });
+
+      const blob = await this.photoToBlob(photo);
+      const filename = this.buildFilename('gallery');
+
+      await this.uploadAndSetValue(blob, filename);
+    } catch (e: any) {
+      if (String(e?.message || e).toLowerCase().includes('cancel')) return;
+      console.error(e);
+      this.errMsg = 'Erro ao selecionar/enviar foto.';
+      await this.toast(this.errMsg, 'danger');
+    } finally {
+      this.uploading = false;
     }
   }
 
   async onFilePicked(ev: any) {
-    if (this.disabled) return;
+    if (this.disabled || this.uploading) return;
 
     this.errMsg = null;
+
     const file: File | null = ev?.target?.files?.[0] || null;
     if (!file) return;
 
-    this.blob = file;
-    this.mimeType = file.type || 'image/jpeg';
-    this.previewUrl = URL.createObjectURL(file);
-  }
-
-  clear() {
-    if (this.disabled) return;
-
-    this.errMsg = null;
-    this.blob = null;
-
-    if (this.previewUrl && this.previewUrl.startsWith('blob:')) {
+    try {
+      this.uploading = true;
+      const filename = file.name || this.buildFilename('web');
+      await this.uploadAndSetValue(file, filename);
+    } catch (e: any) {
+      console.error(e);
+      this.errMsg = 'Erro ao enviar foto.';
+      await this.toast(this.errMsg, 'danger');
+    } finally {
+      this.uploading = false;
       try {
-        URL.revokeObjectURL(this.previewUrl);
+        ev.target.value = '';
       } catch {}
     }
-    this.previewUrl = null;
-
-    // compat renderer
-    this.value = null;
-    this.valueChange.emit(null);
   }
 
-  async save() {
-    if (this.disabled) return;
+  remove() {
+    if (this.disabled || this.uploading) return;
 
-    if (!this.blob) {
-      this.errMsg = 'Nenhuma imagem selecionada.';
-      return;
+    this.errMsg = null;
+    this.value = null;
+    this.previewUrl = null;
+    this.valueChange.emit(null);
+
+    const result: PhotoCaptureResult = { ok: false, error: 'removed' };
+    this.done.emit(result);
+  }
+
+  async cancel() {
+    this.cancelled.emit();
+    if (this.modalCtrl) {
+      await this.modalCtrl.dismiss(null, 'cancel');
+    }
+  }
+
+  private async photoToBlob(photo: Photo): Promise<Blob> {
+    const webPath = photo.webPath;
+    if (!webPath) throw new Error('Camera photo has no webPath');
+    const res = await fetch(webPath);
+    return await res.blob();
+  }
+
+  private buildFilename(source: string): string {
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    return `photo_${this.purpose}_${source}_${ts}.jpg`;
+  }
+
+  private async uploadAndSetValue(blobOrFile: Blob, filename: string) {
+    const resp: any = await this.api
+      .uploadFile(this.tenantId, blobOrFile, filename, this.category, this.purpose)
+      .toPromise();
+
+    // Normalize response flexibly
+    const out: any = {};
+    if (typeof resp === 'string') {
+      out.url = resp;
+    } else {
+      out.id_file_object = resp?.id_file_object ?? resp?.id ?? resp?.file_id ?? resp?.id_file ?? null;
+      out.url = resp?.url ?? resp?.file_url ?? resp?.public_url ?? resp?.path ?? null;
+      out._raw = resp;
     }
 
-    const result: PhotoCaptureResult = { ok: true, blob: this.blob, mime_type: this.mimeType };
+    // Save JSON-friendly value to payload
+    const valueToStore =
+      out.url ? out.url : out.id_file_object ? { id_file_object: out.id_file_object, url: out.url } : out;
 
-    // ✅ compat renderer: emite também valueChange
-    this.value = result;
-    this.valueChange.emit(result);
+    this.value = valueToStore;
+    this.previewUrl = out.url || this.previewUrl;
 
+    this.valueChange.emit(this.value);
+
+    const result: PhotoCaptureResult = {
+      ok: true,
+      id_file_object: out.id_file_object ?? undefined,
+      url: out.url ?? undefined,
+      mime_type: (blobOrFile as any)?.type || undefined,
+    };
     this.done.emit(result);
 
     if (this.modalCtrl) {
@@ -130,11 +248,8 @@ export class PhotoCaptureComponent {
     }
   }
 
-  async cancel() {
-    this.cancelled.emit();
-
-    if (this.modalCtrl) {
-      await this.modalCtrl.dismiss(null, 'cancel');
-    }
+  private async toast(message: string, color: 'success' | 'warning' | 'danger' | 'primary' = 'primary') {
+    const t = await this.toastCtrl.create({ message, duration: 2200, color });
+    await t.present();
   }
 }

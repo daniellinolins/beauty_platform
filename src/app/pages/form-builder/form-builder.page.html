@@ -9,7 +9,7 @@
     <ion-buttons slot="end">
       <ion-button (click)="preview()" [disabled]="loading">Preview</ion-button>
       <ion-button (click)="saveDraft()" [disabled]="loading || isNew || versionStatus !== 'DRAFT'">Salvar</ion-button>
-      <ion-button (click)="publish()" color="success" [disabled]="loading || isNew || versionStatus !== 'DRAFT'">
+      <ion-button (click)="publish()" color="success" [disabled]="!canPublish">
         Publicar
       </ion-button>
     </ion-buttons>
@@ -32,6 +32,22 @@
     <ion-segment-button value="structure" [disabled]="isNew"><ion-label>Estrutura</ion-label></ion-segment-button>
     <ion-segment-button value="versions" [disabled]="isNew"><ion-label>Versões</ion-label></ion-segment-button>
   </ion-segment>
+
+  <!-- Toggle de publicação -->
+  <ion-item
+    lines="none"
+    *ngIf="!loading && !isNew && versionStatus === 'DRAFT'"
+    style="margin-top: 10px; border: 1px solid rgba(0,0,0,.08); border-radius: 10px;"
+  >
+    <ion-label>
+      <div style="font-weight:600;">Substituir publicada anterior?</div>
+      <div style="font-size:12px; opacity:.75;">
+        Ligado: arquiva a versão PUBLISHED atual e publica esta (mode=replace).<br />
+        Desligado: bloqueia se já existir PUBLISHED (mode=error).
+      </div>
+    </ion-label>
+    <ion-toggle [(ngModel)]="publishReplacePrevious"></ion-toggle>
+  </ion-item>
 
   <!-- META -->
   <div *ngIf="tab === 'meta' && !loading">
@@ -71,13 +87,20 @@
 
     <div *ngIf="!isNew" style="margin-top: 10px; opacity:.85;">
       <p><strong>Versão atual:</strong> {{ versionNumber }} ({{ versionStatus }})</p>
+      <p style="font-size:12px; opacity:.75;">
+        Publicar só é permitido se a versão for DRAFT e houver pelo menos 1 elemento no schema.
+      </p>
     </div>
   </div>
 
   <!-- STRUCTURE -->
   <div *ngIf="tab === 'structure' && !loading">
-    <div style="margin-top: 10px;">
-      <p><strong>Versão:</strong> {{ versionNumber }} ({{ versionStatus }})</p>
+    <div style="margin-top: 10px; display:flex; gap:10px; align-items:center;">
+      <p style="margin:0;"><strong>Versão:</strong> {{ versionNumber }} ({{ versionStatus }})</p>
+      <ion-badge [color]="statusBadgeColor(versionStatus)">{{ versionStatus }}</ion-badge>
+      <span *ngIf="versionStatus !== 'DRAFT'" style="font-size:12px; opacity:.75;">
+        (Somente leitura)
+      </span>
     </div>
 
     <h3 style="margin-top: 16px;">Seções</h3>
@@ -91,7 +114,12 @@
 
         <ion-buttons slot="end" *ngIf="versionStatus === 'DRAFT'">
           <ion-button fill="clear" (click)="renameSection(i); $event.stopPropagation();">Renomear</ion-button>
-          <ion-button fill="clear" color="danger" [disabled]="sections.length <= 1" (click)="removeSection(i); $event.stopPropagation();">
+          <ion-button
+            fill="clear"
+            color="danger"
+            [disabled]="sections.length <= 1"
+            (click)="removeSection(i); $event.stopPropagation();"
+          >
             Remover
           </ion-button>
         </ion-buttons>
@@ -133,6 +161,10 @@
     <ion-button expand="block" fill="outline" [disabled]="versionStatus !== 'DRAFT'" (click)="addElement()" style="margin-top: 10px;">
       Adicionar elemento
     </ion-button>
+
+    <p *ngIf="versionStatus !== 'DRAFT'" style="opacity:.75; margin-top: 10px;">
+      Esta versão não é DRAFT, então não pode ser editada. Crie um novo DRAFT na aba “Versões”.
+    </p>
   </div>
 
   <!-- VERSIONS -->
@@ -148,8 +180,20 @@
     <ion-list>
       <ion-item *ngFor="let v of versions" (click)="loadVersionFromList(v)">
         <ion-label>
-          <div><strong>v{{ v.version_number }}</strong> — {{ v.status }}</div>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <strong>v{{ v.version_number }}</strong>
+            <ion-badge [color]="statusBadgeColor(v.status)">{{ v.status }}</ion-badge>
+            <span *ngIf="(v.status || '').toUpperCase() === 'PUBLISHED'" style="font-size:12px; opacity:.75;">
+              (Ativa)
+            </span>
+            <span *ngIf="(v.status || '').toUpperCase() !== 'DRAFT'" style="font-size:12px; opacity:.75;">
+              (Somente leitura)
+            </span>
+          </div>
           <div style="font-size:12px;opacity:.75;">id_form_version: {{ v.id_form_version }}</div>
+          <div *ngIf="(v.status || '').toUpperCase() === 'PUBLISHED'" style="font-size:12px;opacity:.75;">
+            publish_at: {{ v.publish_at }} | published_by: {{ v.published_by }}
+          </div>
         </ion-label>
       </ion-item>
     </ion-list>

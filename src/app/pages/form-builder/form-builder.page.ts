@@ -26,6 +26,8 @@ import {
   IonTextarea,
   IonSelect,
   IonSelectOption,
+  IonToggle,
+  IonBadge,
 } from '@ionic/angular/standalone';
 import { firstValueFrom, Subject, takeUntil } from 'rxjs';
 
@@ -64,6 +66,8 @@ type DefaultLanguage = 'pt-PT' | 'pt-BR' | 'en-US' | 'es-ES';
     IonSelectOption,
     IonReorderGroup,
     IonReorder,
+    IonToggle,
+    IonBadge,
   ],
 })
 export class FormBuilderPage implements OnInit, OnDestroy {
@@ -89,6 +93,9 @@ export class FormBuilderPage implements OnInit, OnDestroy {
 
   versionStatus: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' = 'DRAFT';
   versionNumber: number | null = null;
+
+  // ✅ Toggle: publicar substituindo ou bloqueando se já existe published
+  publishReplacePrevious = true;
 
   schema: FormSchema = {
     schema_version: 'v1',
@@ -158,7 +165,6 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   private normalizeDefaultLanguage(input: any): DefaultLanguage {
     const s = (input ?? '').toString();
     if (s === 'pt-PT' || s === 'pt-BR' || s === 'en-US' || s === 'es-ES') return s;
-    // se vier 'pt' ou 'en' do schema antigo
     if (s === 'en') return 'en-US';
     if (s === 'es') return 'es-ES';
     return 'pt-PT';
@@ -177,12 +183,10 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     const en = t['en'] ?? t['en-US'] ?? '';
     const es = t['es'] ?? t['es-ES'] ?? '';
 
-    // mantém pt/en (compatibilidade)
     t['pt'] = pt || '';
     t['en'] = en || '';
     t['es'] = es || '';
 
-    // garante chaves usadas no HTML
     t['pt-PT'] = t['pt-PT'] ?? pt ?? '';
     t['pt-BR'] = t['pt-BR'] ?? pt ?? '';
     t['en-US'] = t['en-US'] ?? en ?? '';
@@ -192,14 +196,33 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   }
 
   private normalizeSchemaForUi() {
-    // Ajusta schema.default_language quando for 'pt'/'en' etc
     const dl = (this.schema as any)?.default_language;
     this.defaultLanguage = this.normalizeDefaultLanguage(dl);
 
-    // garante que cada seção tenha as chaves pt-PT / en-US etc, já que o HTML usa isso
     for (const s of this.schema.sections || []) {
       this.ensureSectionTitleKeys(s as any);
     }
+  }
+
+  private schemaHasAnyElements(): boolean {
+    return (this.schema?.sections || []).some((s) => Array.isArray(s?.elements) && s.elements.length > 0);
+  }
+
+  private hasPublishedVersion(): boolean {
+    return (this.versions || []).some((v) => (v?.status || '').toUpperCase() === 'PUBLISHED');
+  }
+
+  get canPublish(): boolean {
+    if (this.loading || this.isNew) return false;
+    if (this.versionStatus !== 'DRAFT') return false;
+    return this.schemaHasAnyElements();
+  }
+
+  statusBadgeColor(status: string): string {
+    const s = (status || '').toUpperCase();
+    if (s === 'PUBLISHED') return 'success';
+    if (s === 'DRAFT') return 'warning';
+    return 'medium';
   }
 
   // ---------------------------
@@ -220,12 +243,8 @@ export class FormBuilderPage implements OnInit, OnDestroy {
 
   setDefaultLanguage(v: any) {
     this.defaultLanguage = this.normalizeDefaultLanguage(v);
-
-    // guarda no schema também (compat: salva key curta pt/en/es)
     const key = this.schemaLangKey();
     (this.schema as any).default_language = key;
-
-    // garante chaves em todas as seções
     this.normalizeSchemaForUi();
   }
 
@@ -254,7 +273,7 @@ export class FormBuilderPage implements OnInit, OnDestroy {
       if (this.idFormVersion) {
         await this.loadVersion(this.idFormVersion);
       } else if (this.versions?.length) {
-        const draft = this.versions.find((x) => x.status === 'DRAFT');
+        const draft = this.versions.find((x) => (x.status || '').toUpperCase() === 'DRAFT');
         const pick = draft || this.versions[0];
         if (pick?.id_form_version) {
           await this.loadVersion(Number(pick.id_form_version));
@@ -336,6 +355,8 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   }
 
   async renameSection(i: number) {
+    if (this.versionStatus !== 'DRAFT') return;
+
     const s: any = this.schema.sections?.[i];
     if (!s) return;
 
@@ -365,12 +386,7 @@ export class FormBuilderPage implements OnInit, OnDestroy {
             const pt = (data?.pt ?? '').toString();
             const en = (data?.en ?? '').toString();
 
-            s.title = {
-              ...(s.title || {}),
-              pt,
-              en,
-            };
-
+            s.title = { ...(s.title || {}), pt, en };
             this.ensureSectionTitleKeys(s);
           },
         },
@@ -381,7 +397,9 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   }
 
   removeSection(i: number) {
+    if (this.versionStatus !== 'DRAFT') return;
     if ((this.schema.sections?.length || 0) <= 1) return;
+
     this.schema.sections.splice(i, 1);
     if (this.selectedSectionIndex >= this.schema.sections.length) {
       this.selectedSectionIndex = Math.max(0, this.schema.sections.length - 1);
@@ -389,6 +407,11 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   }
 
   reorderSections(ev: CustomEvent<ItemReorderEventDetail>) {
+    if (this.versionStatus !== 'DRAFT') {
+      ev.detail.complete();
+      return;
+    }
+
     const from = ev.detail.from;
     const to = ev.detail.to;
 
@@ -428,6 +451,11 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   }
 
   reorderElements(ev: CustomEvent<ItemReorderEventDetail>) {
+    if (this.versionStatus !== 'DRAFT') {
+      ev.detail.complete();
+      return;
+    }
+
     const sec = this.currentSection;
     if (!sec) return;
 
@@ -500,7 +528,6 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     this.infoMsg = '';
 
     try {
-      // garante coerência do schema antes de salvar
       this.normalizeSchemaForUi();
 
       const created = await firstValueFrom(
@@ -552,7 +579,6 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     this.loading = true;
 
     try {
-      // garante coerência do schema antes de salvar
       this.normalizeSchemaForUi();
 
       if (!this.idForm) {
@@ -593,10 +619,99 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   }
 
   async publish() {
-    this.infoMsg = 'Publicar ainda não foi ligado aqui (você já tem endpoint no backend).';
+    if (this.loading) return;
+
+    this.errorMsg = '';
+    this.infoMsg = '';
+
+    if (!this.canPublish) {
+      if (this.isNew) this.errorMsg = 'Crie o formulário antes de publicar.';
+      else if (this.versionStatus !== 'DRAFT') this.errorMsg = 'Apenas versões DRAFT podem ser publicadas.';
+      else this.errorMsg = 'Não é possível publicar: o formulário não possui elementos.';
+      return;
+    }
+
+    // Se modo = error e já existe published, avisar antes (o backend também bloqueia)
+    if (!this.publishReplacePrevious && this.hasPublishedVersion()) {
+      const a = await this.alertCtrl.create({
+        header: 'Já existe uma versão publicada',
+        message:
+          'Você desmarcou "Substituir publicada anterior?". Nesse modo, o sistema bloqueará a publicação se já existir uma versão PUBLISHED.',
+        buttons: ['OK'],
+      });
+      await a.present();
+      return;
+    }
+
+    const modeLabel = this.publishReplacePrevious ? 'Substituir publicada anterior (arquivar)' : 'Bloquear se já existir publicada';
+    const alert = await this.alertCtrl.create({
+      header: 'Publicar versão',
+      message: `Modo: <strong>${modeLabel}</strong><br/><br/>Deseja continuar?`,
+      buttons: [
+        { text: 'Cancelar', role: 'cancel' },
+        {
+          text: 'Publicar',
+          handler: async () => {
+            await this.publishConfirmed();
+          },
+        },
+      ],
+    });
+
+    await alert.present();
   }
 
-  // ✅ ESTE ERA O MÉTODO QUE FALTAVA (HTML chama no tab "versions")
+  private async publishConfirmed() {
+    if (!this.idForm) return;
+
+    this.loading = true;
+    this.errorMsg = '';
+    this.infoMsg = '';
+
+    try {
+      // Segurança: garante draft persistido e id_form_version
+      if (!this.idFormVersion) {
+        await this.saveDraft();
+        if (!this.idFormVersion) throw new Error('Não foi possível determinar id_form_version para publicar.');
+      } else {
+        // opcional: salvar antes de publicar para garantir estado atual
+        await this.saveDraft();
+        if (!this.idFormVersion) throw new Error('Falha ao salvar rascunho antes de publicar.');
+      }
+
+      const mode = this.publishReplacePrevious ? 'replace' : 'error';
+
+      const published = await firstValueFrom(
+        this.api
+          .publishFormVersion({
+            tenant_id: this.tenantId,
+            id_form: this.idForm,
+            id_form_version: this.idFormVersion!,
+            mode,
+          })
+          .pipe(takeUntil(this.destroy$)),
+      );
+
+      this.versionStatus = (published?.status || 'PUBLISHED') as any;
+      this.versionNumber = published?.version_number ?? this.versionNumber;
+
+      await this.refreshVersions();
+      this.infoMsg = 'Versão publicada com sucesso.';
+      this.tab = 'versions';
+    } catch (e: any) {
+      const status = e?.status;
+      const msg = e?.error?.error || e?.error?.message || e?.message || 'Erro ao publicar.';
+
+      if (status === 409) {
+        this.errorMsg = msg;
+      } else {
+        this.errorMsg = msg;
+      }
+    } finally {
+      this.loading = false;
+    }
+  }
+
   async createNewDraftFromCurrent() {
     if (this.loading) return;
     if (!this.idForm) return;
@@ -606,7 +721,6 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     this.infoMsg = '';
 
     try {
-      // garante coerência do schema antes de clonar
       this.normalizeSchemaForUi();
 
       const createdV = await firstValueFrom(

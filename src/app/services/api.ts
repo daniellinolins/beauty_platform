@@ -69,6 +69,8 @@ export class ApiService {
     schema_json: any;
     status?: VersionStatus;
   }): Observable<any> {
+    // Observação: teu backend lê "status"; aqui você já vinha mandando "version_status".
+    // Mantive pra não quebrar teu fluxo atual. (Backend defaulta pra DRAFT.)
     return this.http.post(`${this.baseUrl}/forms/${req.id_form}/versions`, {
       tenant_id: req.tenant_id,
       version_status: (req.status || 'DRAFT') as VersionStatus,
@@ -86,11 +88,13 @@ export class ApiService {
     tenant_id: number;
     id_form: number;
     id_form_version: number;
+    mode?: 'replace' | 'error';
   }): Observable<any> {
+    const mode = req.mode || 'replace';
     return this.http.post(
       `${this.baseUrl}/forms/${req.id_form}/versions/${req.id_form_version}/publish`,
       null,
-      { params: { tenant_id: req.tenant_id } },
+      { params: { tenant_id: req.tenant_id, mode } },
     );
   }
 

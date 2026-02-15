@@ -6,21 +6,18 @@
 
 <ion-content [fullscreen]="true">
   <ion-list>
-    <ion-item
-      button
-      *ngFor="let form of forms"
-      (click)="openForm(form)"
-    >
+    <ion-item button *ngFor="let form of forms" [routerLink]="fillUrl(form)">
       <ion-label>
         <h2>{{ form.name }}</h2>
         <p>{{ form.description }}</p>
       </ion-label>
 
       <ion-buttons slot="end">
-        <ion-button fill="clear" (click)="editForm(form); $event.stopPropagation()">
+        <ion-button fill="clear" [routerLink]="editUrl(form)" (click)="$event.stopPropagation()">
           <ion-icon name="create-outline"></ion-icon>
         </ion-button>
-        <ion-button fill="clear" (click)="openForm(form); $event.stopPropagation()">
+
+        <ion-button fill="clear" [routerLink]="fillUrl(form)" (click)="$event.stopPropagation()">
           <ion-icon name="play-outline"></ion-icon>
         </ion-button>
       </ion-buttons>

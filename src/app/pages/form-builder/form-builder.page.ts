@@ -88,13 +88,11 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   formDescription = '';
   formStatus: 'ACTIVE' | 'INACTIVE' = 'ACTIVE';
 
-  // ✅ precisa bater com o HTML (pt-PT, pt-BR, en-US, es-ES)
   defaultLanguage: DefaultLanguage = 'pt-PT';
 
   versionStatus: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' = 'DRAFT';
   versionNumber: number | null = null;
 
-  // ✅ Toggle: publicar substituindo ou bloqueando se já existe published
   publishReplacePrevious = true;
 
   schema: FormSchema = {
@@ -145,7 +143,8 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
-    const id = this.route.snapshot.paramMap.get('id');
+    // ✅ CORREÇÃO: sua rota usa :idForm (não :id)
+    const id = this.route.snapshot.paramMap.get('idForm');
     this.idForm = id ? Number(id) : null;
 
     const v = this.route.snapshot.queryParamMap.get('version');
@@ -159,9 +158,6 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  // ---------------------------
-  // helpers
-  // ---------------------------
   private normalizeDefaultLanguage(input: any): DefaultLanguage {
     const s = (input ?? '').toString();
     if (s === 'pt-PT' || s === 'pt-BR' || s === 'en-US' || s === 'es-ES') return s;
@@ -225,9 +221,6 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     return 'medium';
   }
 
-  // ---------------------------
-  // Meta handlers (HTML usa)
-  // ---------------------------
   setFormName(v: any) {
     this.formName = (v ?? '').toString().replace(/^\s+/, '');
   }
@@ -253,9 +246,6 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     this.tab = val === 'meta' || val === 'structure' || val === 'versions' ? val : 'meta';
   }
 
-  // ---------------------------
-  // Load / Refresh
-  // ---------------------------
   async load() {
     this.errorMsg = '';
     this.infoMsg = '';
@@ -326,9 +316,6 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     if (id) this.loadVersion(Number(id));
   }
 
-  // ---------------------------
-  // Sections (HTML usa)
-  // ---------------------------
   selectSection(i: number) {
     this.selectedSectionIndex = i;
   }
@@ -423,9 +410,6 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     this.selectedSectionIndex = to;
   }
 
-  // ---------------------------
-  // Elements (HTML usa)
-  // ---------------------------
   isField(el: any): boolean {
     return el?.type === 'FIELD';
   }
@@ -504,9 +488,6 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     else sec.elements[index] = updated;
   }
 
-  // ---------------------------
-  // Preview / Create / Save Draft / Clone Draft
-  // ---------------------------
   async preview() {
     const modal = await this.modalCtrl.create({
       component: FormPreviewModal,
@@ -631,7 +612,6 @@ export class FormBuilderPage implements OnInit, OnDestroy {
       return;
     }
 
-    // Se modo = error e já existe published, avisar antes (o backend também bloqueia)
     if (!this.publishReplacePrevious && this.hasPublishedVersion()) {
       const a = await this.alertCtrl.create({
         header: 'Já existe uma versão publicada',
@@ -643,7 +623,10 @@ export class FormBuilderPage implements OnInit, OnDestroy {
       return;
     }
 
-    const modeLabel = this.publishReplacePrevious ? 'Substituir publicada anterior (arquivar)' : 'Bloquear se já existir publicada';
+    const modeLabel = this.publishReplacePrevious
+      ? 'Substituir publicada anterior (arquivar)'
+      : 'Bloquear se já existir publicada';
+
     const alert = await this.alertCtrl.create({
       header: 'Publicar versão',
       message: `Modo: <strong>${modeLabel}</strong><br/><br/>Deseja continuar?`,
@@ -669,12 +652,10 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     this.infoMsg = '';
 
     try {
-      // Segurança: garante draft persistido e id_form_version
       if (!this.idFormVersion) {
         await this.saveDraft();
         if (!this.idFormVersion) throw new Error('Não foi possível determinar id_form_version para publicar.');
       } else {
-        // opcional: salvar antes de publicar para garantir estado atual
         await this.saveDraft();
         if (!this.idFormVersion) throw new Error('Falha ao salvar rascunho antes de publicar.');
       }
@@ -702,11 +683,8 @@ export class FormBuilderPage implements OnInit, OnDestroy {
       const status = e?.status;
       const msg = e?.error?.error || e?.error?.message || e?.message || 'Erro ao publicar.';
 
-      if (status === 409) {
-        this.errorMsg = msg;
-      } else {
-        this.errorMsg = msg;
-      }
+      if (status === 409) this.errorMsg = msg;
+      else this.errorMsg = msg;
     } finally {
       this.loading = false;
     }

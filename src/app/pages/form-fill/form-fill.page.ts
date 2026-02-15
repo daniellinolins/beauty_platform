@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { IonicModule, ToastController } from '@ionic/angular';
 import { Subject, takeUntil } from 'rxjs';
 import { ApiService } from 'src/app/services/api';
@@ -9,7 +9,7 @@ import { FormRendererComponent } from 'src/app/components/form-renderer/form-ren
 @Component({
   selector: 'app-form-fill',
   standalone: true,
-  imports: [CommonModule, IonicModule, FormRendererComponent],
+  imports: [CommonModule, IonicModule, RouterModule, FormRendererComponent],
   templateUrl: './form-fill.page.html',
   styleUrls: ['./form-fill.page.scss'],
 })
@@ -19,6 +19,7 @@ export class FormFillPage implements OnDestroy {
   tenantId = 1;
 
   loading = true;
+
   idForm!: number;
 
   formName = '';
@@ -42,7 +43,8 @@ export class FormFillPage implements OnDestroy {
   ionViewWillEnter() {
     this.loading = true;
 
-    const id = Number(this.route.snapshot.paramMap.get('id'));
+    // ✅ CORREÇÃO: sua rota usa :idForm (não :id)
+    const id = Number(this.route.snapshot.paramMap.get('idForm'));
     if (!id || Number.isNaN(id)) {
       this.loading = false;
       this.router.navigateByUrl('/forms');
@@ -50,7 +52,12 @@ export class FormFillPage implements OnDestroy {
     }
 
     this.idForm = id;
-    this.loadLatest();
+
+    // opcional: melhora o título sem depender do backend das versões
+    this.loadFormMeta();
+
+    // carrega versão para preencher
+    this.loadPublishedOrLatestVersion();
   }
 
   ngOnDestroy(): void {
@@ -58,31 +65,105 @@ export class FormFillPage implements OnDestroy {
     this.destroy$.complete();
   }
 
-  private loadLatest() {
+  private async loadFormMeta() {
+    // listForms é o que você já tem no ApiService
     this.api
-      .listFormVersions(this.tenantId, this.idForm)
-      //.getLatestFormVersion(this.tenantId, this.idForm)
+      .listForms(this.tenantId)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (res: any) => {
-          // Esperado do backend (exemplos comuns):
-          // res.form.name, res.version.id_form_version, res.version.schema_json, etc.
-          const form = res?.form || {};
-          const ver = res?.version || res?.latest || res || {};
+        next: (list) => {
+          const found = (list || []).find((f: any) => Number(f?.id_form) === Number(this.idForm));
+          if (found?.name) this.formName = found.name;
+        },
+        error: () => {
+          // não é crítico
+        },
+      });
+  }
 
-          this.formName = form?.name || res?.name || 'Formulário';
-          this.versionId = ver?.id_form_version ?? ver?.id ?? null;
+  private mapDefaultLanguageToRenderer(schemaDefaultLang: any): string {
+    const s = (schemaDefaultLang ?? '').toString();
 
-          const schema = ver?.schema_json || ver?.schema || null;
+    // se já vier completo, mantém
+    if (s === 'pt-PT' || s === 'pt-BR' || s === 'en-US' || s === 'es-ES') return s;
 
-          this.defaultLang = schema?.default_language || form?.default_language || 'pt-PT';
+    // seu schema normalmente salva curto: pt/en/es
+    if (s === 'pt') return 'pt-PT';
+    if (s === 'en') return 'en-US';
+    if (s === 'es') return 'es-ES';
 
-          // seu schema pode ser { sections:[{elements:[]}] } ou direto {elements:[]}
+    return 'pt-PT';
+  }
+
+  private loadPublishedOrLatestVersion() {
+    this.api
+      .listFormVersions(this.tenantId, this.idForm)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: async (list: any) => {
+          const versions = Array.isArray(list) ? list : [];
+
+          if (!versions.length) {
+            this.loading = false;
+            const t = await this.toastCtrl.create({
+              message: 'Nenhuma versão encontrada para este formulário.',
+              duration: 2500,
+              color: 'warning',
+            });
+            await t.present();
+            return;
+          }
+
+          // ✅ preferência para PUBLISHED
+          const published = versions.find((v: any) => (v?.status || '').toUpperCase() === 'PUBLISHED');
+          const picked = published || versions[0]; // versions já vem DESC no backend
+
+          this.versionId = picked?.id_form_version ?? null;
+
+          // schema_json pode vir string
+          let schema: any = picked?.schema_json ?? null;
+          try {
+            if (typeof schema === 'string') schema = JSON.parse(schema);
+          } catch {
+            schema = null;
+          }
+
+          if (!schema) {
+            this.loading = false;
+            const t = await this.toastCtrl.create({
+              message: 'Schema inválido na versão do formulário.',
+              duration: 2500,
+              color: 'danger',
+            });
+            await t.present();
+            return;
+          }
+
+          this.defaultLang = this.mapDefaultLanguageToRenderer(schema?.default_language);
+
+          // Seu schema é { sections:[{elements:[]}] }
           const sections = Array.isArray(schema?.sections) ? schema.sections : [];
           if (sections.length > 0) {
-            this.elements = (sections[0]?.elements || []) as any[];
+            // por enquanto, renderiza todas as seções em sequência (concat)
+            // se seu renderer suporta "sections", você pode adaptar depois.
+            const all: any[] = [];
+            for (const s of sections) {
+              if (Array.isArray(s?.elements)) all.push(...s.elements);
+            }
+            this.elements = all;
           } else {
+            // fallback se existir schema antigo
             this.elements = Array.isArray(schema?.elements) ? schema.elements : [];
+          }
+
+          if (!this.elements.length) {
+            // não bloqueia, mas avisa
+            const t = await this.toastCtrl.create({
+              message: 'Aviso: versão carregada não possui elementos.',
+              duration: 2200,
+              color: 'warning',
+            });
+            await t.present();
           }
 
           this.loading = false;
@@ -91,7 +172,7 @@ export class FormFillPage implements OnDestroy {
           console.error(err);
           this.loading = false;
           const t = await this.toastCtrl.create({
-            message: 'Erro ao carregar formulário.',
+            message: 'Erro ao carregar versões do formulário.',
             duration: 2500,
             color: 'danger',
           });
@@ -100,14 +181,12 @@ export class FormFillPage implements OnDestroy {
       });
   }
 
-  // ✅ Agora aceita ErrorEvent / qualquer coisa, sem erro de compile
   async onRendererError(err: unknown) {
     console.error('Renderer error:', err);
 
     let msg = 'Erro ao renderizar formulário.';
     if (typeof err === 'string') msg = err;
     else if (err && typeof err === 'object') {
-      // ErrorEvent costuma ter message
       const anyErr: any = err;
       if (typeof anyErr?.message === 'string' && anyErr.message.trim()) {
         msg = anyErr.message;
@@ -122,14 +201,13 @@ export class FormFillPage implements OnDestroy {
     await t.present();
   }
 
-  // opcional: se você já tem botão salvar em outro lugar, pode ignorar.
   async save() {
+    // Mantive seu comportamento: se não existir submissionId, avisa
     if (!this.submissionId) {
-      // Se sua main cria submission antes, mantenha igual.
-      // Aqui deixo apenas uma mensagem para não quebrar.
       const t = await this.toastCtrl.create({
-        message: 'Nenhuma submissão ativa para salvar.',
-        duration: 2200,
+        message:
+          'Nenhuma submissão ativa para salvar. (Se você quer salvar no backend, precisamos criar uma submission antes.)',
+        duration: 2800,
         color: 'warning',
       });
       await t.present();

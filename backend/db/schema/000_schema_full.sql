@@ -89,6 +89,42 @@ CREATE TABLE `client_clinic` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `client_clinic_authorization`
+--
+
+DROP TABLE IF EXISTS `client_clinic_authorization`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `client_clinic_authorization` (
+  `authorization_id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `tenant_id` bigint(20) NOT NULL,
+  `clinic_id` bigint(20) NOT NULL,
+  `client_id` bigint(20) NOT NULL,
+  `code` varchar(20) NOT NULL,
+  `channel` varchar(20) NOT NULL DEFAULT 'INBOX',
+  `status` varchar(20) NOT NULL DEFAULT 'SENT',
+  `expires_at` datetime NOT NULL,
+  `used_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `created_by` bigint(20) DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  `updated_by` bigint(20) DEFAULT NULL,
+  `deleted_at` datetime DEFAULT NULL,
+  `deleted_by` bigint(20) DEFAULT NULL,
+  PRIMARY KEY (`authorization_id`),
+  UNIQUE KEY `uq_auth_code` (`code`),
+  KEY `ix_auth_tenant_client` (`tenant_id`,`client_id`),
+  KEY `ix_auth_tenant_clinic` (`tenant_id`,`clinic_id`),
+  KEY `ix_auth_status` (`tenant_id`,`status`),
+  KEY `fk_auth_clinic` (`clinic_id`),
+  KEY `fk_auth_client` (`client_id`),
+  CONSTRAINT `fk_auth_client` FOREIGN KEY (`client_id`) REFERENCES `client` (`client_id`),
+  CONSTRAINT `fk_auth_clinic` FOREIGN KEY (`clinic_id`) REFERENCES `clinic` (`clinic_id`),
+  CONSTRAINT `fk_auth_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `clinic`
 --
 
@@ -124,6 +160,31 @@ CREATE TABLE `clinic` (
   CONSTRAINT `fk_clinic_logo_file` FOREIGN KEY (`logo_file_id`) REFERENCES `file_object` (`id_file_object`),
   CONSTRAINT `fk_clinic_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `contact_verification`
+--
+
+DROP TABLE IF EXISTS `contact_verification`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `contact_verification` (
+  `verification_id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) NOT NULL,
+  `purpose` varchar(30) NOT NULL,
+  `target` varchar(200) NOT NULL,
+  `code` varchar(20) NOT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'SENT',
+  `expires_at` datetime NOT NULL,
+  `used_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`verification_id`),
+  UNIQUE KEY `uq_verification_code` (`code`),
+  KEY `ix_ver_user_purpose` (`user_id`,`purpose`),
+  KEY `ix_ver_status` (`status`),
+  CONSTRAINT `fk_ver_user` FOREIGN KEY (`user_id`) REFERENCES `user_account` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -397,6 +458,103 @@ CREATE TABLE `form_version` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `notification`
+--
+
+DROP TABLE IF EXISTS `notification`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `notification` (
+  `notification_id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) NOT NULL,
+  `tenant_id` bigint(20) DEFAULT NULL,
+  `title` varchar(200) NOT NULL,
+  `message` text NOT NULL,
+  `type` varchar(30) NOT NULL DEFAULT 'INFO',
+  `channel` varchar(20) NOT NULL DEFAULT 'INBOX',
+  `meta_json` text DEFAULT NULL,
+  `sent_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `read_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `created_by` bigint(20) DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  `updated_by` bigint(20) DEFAULT NULL,
+  `deleted_at` datetime DEFAULT NULL,
+  `deleted_by` bigint(20) DEFAULT NULL,
+  PRIMARY KEY (`notification_id`),
+  KEY `ix_notif_user` (`user_id`,`read_at`),
+  KEY `ix_notif_tenant` (`tenant_id`,`sent_at`),
+  CONSTRAINT `fk_notif_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`),
+  CONSTRAINT `fk_notif_user` FOREIGN KEY (`user_id`) REFERENCES `user_account` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `service`
+--
+
+DROP TABLE IF EXISTS `service`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `service` (
+  `service_id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `tenant_id` bigint(20) NOT NULL,
+  `clinic_id` bigint(20) NOT NULL,
+  `service_code` varchar(60) DEFAULT NULL,
+  `name` varchar(200) NOT NULL,
+  `description` varchar(1000) DEFAULT NULL,
+  `duration_min` int(11) DEFAULT NULL,
+  `price` decimal(12,2) DEFAULT NULL,
+  `active_flag` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `created_by` bigint(20) DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  `updated_by` bigint(20) DEFAULT NULL,
+  `deleted_at` datetime DEFAULT NULL,
+  `deleted_by` bigint(20) DEFAULT NULL,
+  PRIMARY KEY (`service_id`),
+  UNIQUE KEY `uq_service_code` (`tenant_id`,`clinic_id`,`service_code`),
+  KEY `ix_service_tenant_clinic` (`tenant_id`,`clinic_id`),
+  KEY `ix_service_active` (`tenant_id`,`clinic_id`,`active_flag`),
+  KEY `fk_service_clinic` (`clinic_id`),
+  CONSTRAINT `fk_service_clinic` FOREIGN KEY (`clinic_id`) REFERENCES `clinic` (`clinic_id`),
+  CONSTRAINT `fk_service_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `subscription_plan`
+--
+
+DROP TABLE IF EXISTS `subscription_plan`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `subscription_plan` (
+  `plan_id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `plan_code` varchar(60) NOT NULL,
+  `name` varchar(200) NOT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'ACTIVE',
+  `price_monthly` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `currency_code` varchar(10) NOT NULL DEFAULT 'EUR',
+  `max_clinics` int(11) NOT NULL DEFAULT 1,
+  `max_clients` int(11) NOT NULL DEFAULT 0,
+  `max_forms` int(11) NOT NULL DEFAULT 0,
+  `max_submissions_month` int(11) NOT NULL DEFAULT 0,
+  `max_storage_mb` int(11) NOT NULL DEFAULT 0,
+  `features_json` text DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `created_by` bigint(20) DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  `updated_by` bigint(20) DEFAULT NULL,
+  `deleted_at` datetime DEFAULT NULL,
+  `deleted_by` bigint(20) DEFAULT NULL,
+  PRIMARY KEY (`plan_id`),
+  UNIQUE KEY `uq_plan_code` (`plan_code`),
+  KEY `ix_plan_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `tenant`
 --
 
@@ -435,6 +593,41 @@ CREATE TABLE `tenant` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `tenant_subscription`
+--
+
+DROP TABLE IF EXISTS `tenant_subscription`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `tenant_subscription` (
+  `tenant_subscription_id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `tenant_id` bigint(20) NOT NULL,
+  `plan_id` bigint(20) NOT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'TRIAL',
+  `trial_start_at` datetime DEFAULT NULL,
+  `trial_end_at` datetime DEFAULT NULL,
+  `current_period_start` datetime DEFAULT NULL,
+  `current_period_end` datetime DEFAULT NULL,
+  `cancelled_at` datetime DEFAULT NULL,
+  `provider` varchar(30) DEFAULT NULL,
+  `provider_subscription_id` varchar(120) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `created_by` bigint(20) DEFAULT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  `updated_by` bigint(20) DEFAULT NULL,
+  `deleted_at` datetime DEFAULT NULL,
+  `deleted_by` bigint(20) DEFAULT NULL,
+  PRIMARY KEY (`tenant_subscription_id`),
+  KEY `ix_ts_tenant` (`tenant_id`),
+  KEY `ix_ts_status` (`tenant_id`,`status`),
+  KEY `ix_ts_period` (`tenant_id`,`current_period_end`),
+  KEY `fk_ts_plan` (`plan_id`),
+  CONSTRAINT `fk_ts_plan` FOREIGN KEY (`plan_id`) REFERENCES `subscription_plan` (`plan_id`),
+  CONSTRAINT `fk_ts_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `user_account`
 --
 
@@ -447,7 +640,9 @@ CREATE TABLE `user_account` (
   `tenant_id` bigint(20) DEFAULT NULL,
   `client_id` bigint(20) DEFAULT NULL,
   `email` varchar(200) NOT NULL,
+  `phone` varchar(40) DEFAULT NULL,
   `email_verified` tinyint(1) NOT NULL DEFAULT 0,
+  `phone_verified` tinyint(1) NOT NULL DEFAULT 0,
   `password_hash` varchar(255) NOT NULL,
   `status` varchar(20) NOT NULL DEFAULT 'ACTIVE',
   `last_login_at` datetime DEFAULT NULL,
@@ -459,10 +654,12 @@ CREATE TABLE `user_account` (
   `deleted_by` bigint(20) DEFAULT NULL,
   PRIMARY KEY (`user_id`),
   UNIQUE KEY `uq_user_email` (`email`),
+  UNIQUE KEY `uq_user_phone` (`phone`),
   KEY `ix_user_type` (`user_type`),
   KEY `ix_user_tenant` (`tenant_id`),
   KEY `ix_user_client` (`client_id`),
   KEY `ix_user_status` (`status`),
+  KEY `ix_user_phone_verified` (`phone_verified`),
   CONSTRAINT `fk_user_client` FOREIGN KEY (`client_id`) REFERENCES `client` (`client_id`),
   CONSTRAINT `fk_user_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -552,4 +749,4 @@ SET character_set_client = @saved_cs_client;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-02-16 16:21:22
+-- Dump completed on 2026-02-16 18:29:50

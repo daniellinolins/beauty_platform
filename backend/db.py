@@ -1,4 +1,5 @@
 import os
+from contextlib import contextmanager
 from flask import current_app, g
 import pymysql
 
@@ -37,7 +38,7 @@ def get_conn():
             port=int(_cfg("DB_PORT", 3306)),
             charset="utf8mb4",
             cursorclass=pymysql.cursors.DictCursor,
-            autocommit=True,
+            autocommit=True,  # keep current behavior
         )
         g._db_conn = conn
     return conn
@@ -80,6 +81,47 @@ def execute_no_return(sql: str, params: dict | None = None, return_lastrowid: bo
         conn.commit()
         return cur.lastrowid if return_lastrowid else None
 
+
+@contextmanager
+def transaction():
+    """
+    Transaction context manager that works with the existing g-scoped connection.
+
+    Usage:
+      with transaction() as (conn, cur):
+          cur.execute(...)
+          ...
+    """
+    conn = get_conn()
+
+    # Save autocommit mode and force transactional mode
+    prev_autocommit = conn.get_autocommit()
+    try:
+        if prev_autocommit:
+            conn.autocommit(False)
+
+        with conn.cursor() as cur:
+            yield conn, cur
+
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        # Restore original autocommit mode
+        try:
+            conn.autocommit(prev_autocommit)
+        except Exception:
+            pass
+
+
+def execute_in_tx(cur, sql: str, params=None):
+    """
+    Execute a statement using an existing transaction cursor.
+    Returns lastrowid.
+    """
+    cur.execute(sql, _normalize_params(params))
+    return cur.lastrowid
 
 
 # Backwards-compatible aliases (some files were importing these names)

@@ -150,7 +150,7 @@ CREATE TABLE `file_object` (
   KEY `ix_file_tenant` (`tenant_id`),
   KEY `ix_file_sha` (`tenant_id`,`sha256`),
   CONSTRAINT `fk_file_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=73 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=112 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -179,7 +179,7 @@ CREATE TABLE `form` (
   KEY `ix_form_tenant` (`tenant_id`),
   KEY `ix_form_status` (`tenant_id`,`status`),
   CONSTRAINT `fk_form_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=27 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=42 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -293,7 +293,7 @@ CREATE TABLE `form_submission` (
   CONSTRAINT `fk_submission_form_version` FOREIGN KEY (`id_form_version`) REFERENCES `form_version` (`id_form_version`),
   CONSTRAINT `fk_submission_pdf_file` FOREIGN KEY (`pdf_file_id`) REFERENCES `file_object` (`id_file_object`),
   CONSTRAINT `fk_submission_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=44 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=81 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -384,14 +384,16 @@ CREATE TABLE `form_version` (
   `updated_by` bigint(20) DEFAULT NULL,
   `deleted_at` datetime DEFAULT NULL,
   `deleted_by` bigint(20) DEFAULT NULL,
+  `published_flag` tinyint(4) GENERATED ALWAYS AS (case when `status` = 'PUBLISHED' then 1 else NULL end) STORED,
   PRIMARY KEY (`id_form_version`),
   UNIQUE KEY `uq_form_version` (`tenant_id`,`id_form`,`version_number`),
-  KEY `fk_form_version_form` (`id_form`),
+  UNIQUE KEY `uq_form_one_published` (`id_form`,`published_flag`),
   KEY `ix_form_version_tenant_form` (`tenant_id`,`id_form`),
   KEY `ix_form_version_status` (`tenant_id`,`status`),
+  KEY `ix_form_version_form_status` (`id_form`,`status`),
   CONSTRAINT `fk_form_version_form` FOREIGN KEY (`id_form`) REFERENCES `form` (`id_form`),
   CONSTRAINT `fk_form_version_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=29 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=56 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -550,4 +552,4 @@ SET character_set_client = @saved_cs_client;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-02-12 13:53:33
+-- Dump completed on 2026-02-16 16:21:22

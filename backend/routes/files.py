@@ -57,7 +57,7 @@ def upload_file():
         return jsonify({"error": "tenant_id is required"}), 400
 
     category = request.form.get("category", "photos").strip().lower()
-    if category not in ("photos", "signatures", "pdfs"):
+    if category not in ("photos", "signatures", "pdfs", "drawings"):
         category = "photos"
 
     purpose = (request.form.get("purpose") or "").strip()

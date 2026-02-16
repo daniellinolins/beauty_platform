@@ -20,6 +20,7 @@ import {
 
 import { PhotoCaptureComponent } from '../photo-capture/photo-capture.component';
 import { SignaturePadComponent } from '../signature-pad/signature-pad.component';
+import { DrawOnImageComponent } from '../draw-on-image/draw-on-image.component';
 
 import {
   FieldOption,
@@ -50,6 +51,7 @@ import {
     IonModal,
     PhotoCaptureComponent,
     SignaturePadComponent,
+    DrawOnImageComponent,
   ],
   templateUrl: './form-renderer.component.html',
 })
@@ -145,6 +147,12 @@ export class FormRendererComponent {
   getOptions(e: FormElement): FieldOption[] {
     if (e.type !== 'FIELD') return [];
     return (e as any).options || [];
+  }
+
+  getDrawOnImageBackgroundUrl(e: FormElement): string {
+    if (e.type !== 'FIELD') return '';
+    const cfg = (e as any).draw_on_image;
+    return (cfg?.background_url ?? '').toString();
   }
 
   isRequired(e: FormElement): boolean {

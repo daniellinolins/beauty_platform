@@ -1,0 +1,79 @@
+<div class="doi-root">
+  <!-- Preview do desenho salvo (imagem final mesclada) -->
+  <div class="doi-preview" *ngIf="previewUrl && !showCanvas">
+    <img [src]="previewUrl" alt="Desenho" />
+  </div>
+
+  <!-- Canvas overlay sobre background -->
+  <div class="doi-wrap" #wrap *ngIf="showCanvas">
+    <div class="doi-stage">
+      <img
+        #bgImg
+        class="doi-bg"
+        [src]="backgroundUrl"
+        alt="Imagem de fundo"
+        crossOrigin="anonymous"
+        (load)="onBgLoad()"
+      />
+
+      <canvas
+        #canvas
+        class="doi-canvas"
+        (pointerdown)="onPointerDown($event)"
+        (pointermove)="onPointerMove($event)"
+        (pointerup)="onPointerUp($event)"
+        (pointercancel)="onPointerUp($event)"
+      ></canvas>
+    </div>
+
+    <div class="doi-hint" *ngIf="!backgroundUrl">
+      Informe um <strong>background_url</strong> para habilitar o desenho.
+    </div>
+  </div>
+
+  <!-- Ações -->
+  <div class="doi-actions" *ngIf="!disabled">
+    <ion-button
+      expand="block"
+      (click)="saveDrawing()"
+      [disabled]="uploading || disabled || !showCanvas || !backgroundUrl"
+    >
+      Salvar Desenho
+    </ion-button>
+
+    <ion-button
+      expand="block"
+      fill="outline"
+      (click)="clearCanvas()"
+      [disabled]="uploading || disabled || !showCanvas"
+    >
+      Limpar
+    </ion-button>
+
+    <ion-button
+      expand="block"
+      fill="clear"
+      color="danger"
+      (click)="resetValue()"
+      [disabled]="uploading || disabled"
+      *ngIf="value"
+    >
+      Redefinir desenho
+    </ion-button>
+
+    <ion-button
+      expand="block"
+      fill="outline"
+      (click)="drawAgain()"
+      [disabled]="uploading || disabled"
+      *ngIf="previewUrl && !showCanvas"
+    >
+      Desenhar novamente
+    </ion-button>
+  </div>
+
+  <div class="doi-uploading" *ngIf="uploading">
+    <ion-spinner name="crescent"></ion-spinner>
+    <span>Salvando...</span>
+  </div>
+</div>

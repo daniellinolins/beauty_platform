@@ -203,6 +203,25 @@
           (valueChange)="setPayloadValue(getKey(e), $event)"
         ></app-signature-pad>
       </div>
+
+      <!-- DRAW_ON_IMAGE -->
+      <div *ngIf="getInputType(e) === 'DRAW_ON_IMAGE'" style="margin-top: 10px">
+        <ion-item lines="none">
+          <ion-label position="stacked">{{
+            getTextLocalized(getLabel(e))
+          }}</ion-label>
+        </ion-item>
+
+        <app-draw-on-image
+          [disabled]="mode === 'preview'"
+          [tenantId]="tenantId"
+          [backgroundUrl]="getDrawOnImageBackgroundUrl(e)"
+          [category]="'drawings'"
+          [purpose]="getKey(e) || 'drawing'"
+          [value]="getPayloadValue(getKey(e))"
+          (valueChange)="setPayloadValue(getKey(e), $event)"
+        ></app-draw-on-image>
+      </div>
     </div>
   </ng-container>
 </div>

@@ -95,6 +95,14 @@ type StaticType = StaticElement['type'];
           </ion-select>
         </ion-item>
 
+        <!-- DRAW_ON_IMAGE config -->
+        <ng-container *ngIf="field.input_type === 'DRAW_ON_IMAGE'">
+          <ion-item>
+            <ion-label position="stacked">Background URL</ion-label>
+            <ion-input [(ngModel)]="drawBackgroundUrl" placeholder="https://..."></ion-input>
+          </ion-item>
+        </ng-container>
+
         <ion-item>
           <ion-label position="stacked">Label (pt)</ion-label>
           <ion-input [(ngModel)]="labelPt" placeholder="Ex: Nível do cliente"></ion-input>
@@ -233,6 +241,7 @@ export class ElementEditorModal implements OnInit {
     'MULTI_CHOICE',
     'PHOTO',
     'SIGNATURE',
+    'DRAW_ON_IMAGE',
   ];
 
   // FIELD
@@ -246,6 +255,9 @@ export class ElementEditorModal implements OnInit {
   phPt = '';
   phEn = '';
   required = false;
+
+  // DRAW_ON_IMAGE
+  drawBackgroundUrl = '';
 
   options: FieldOption[] = [];
   // para facilitar binding dos labels (evitar mexer no objeto a cada tecla)
@@ -284,7 +296,10 @@ export class ElementEditorModal implements OnInit {
         options: el.options,
         rules: el.rules,
         photo_purpose: el.photo_purpose,
+        draw_on_image: (el as any).draw_on_image,
       };
+
+      this.drawBackgroundUrl = ((el as any).draw_on_image?.background_url ?? '').toString();
 
       this.labelPt = (el.label && el.label['pt']) ? String(el.label['pt']) : '';
       this.labelEn = (el.label && el.label['en']) ? String(el.label['en']) : '';
@@ -356,6 +371,9 @@ export class ElementEditorModal implements OnInit {
         ...(this.needsOptions(this.field.input_type) ? { options: this.options } : {}),
         ...(Object.keys(rules).length ? { rules } : {}),
         ...(this.field.photo_purpose ? { photo_purpose: this.field.photo_purpose } : {}),
+        ...(this.field.input_type === 'DRAW_ON_IMAGE'
+          ? { draw_on_image: { background_url: (this.drawBackgroundUrl || '').trim() } }
+          : {}),
       };
 
       this.modalCtrl.dismiss(built, 'confirm');
@@ -378,6 +396,7 @@ export class ElementEditorModal implements OnInit {
       this.options = [];
       this.optLabelPt = [];
       this.optLabelEn = [];
+      this.drawBackgroundUrl = '';
     } else {
       this.staticType = 'TITLE';
       this.textPt = '';
@@ -395,6 +414,10 @@ export class ElementEditorModal implements OnInit {
       this.optLabelEn = [];
     } else if (!this.options.length) {
       this.addOption();
+    }
+
+    if (this.field.input_type !== 'DRAW_ON_IMAGE') {
+      this.drawBackgroundUrl = '';
     }
   }
 

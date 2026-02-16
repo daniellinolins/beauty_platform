@@ -19,7 +19,8 @@ export type InputType =
   | 'MULTI_CHOICE'
   | 'SELECT'
   | 'PHOTO'
-  | 'SIGNATURE';
+  | 'SIGNATURE'
+  | 'DRAW_ON_IMAGE';
 
 export type FieldOption = {
   value: string;
@@ -44,6 +45,9 @@ export type FieldElement = {
   options?: FieldOption[];
   rules?: FieldRules;
   photo_purpose?: string;
+  draw_on_image?: {
+    background_url: string;
+  };
 };
 
 export type StaticElement =

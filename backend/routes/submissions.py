@@ -2,6 +2,8 @@ import json
 from flask import Blueprint, request, jsonify
 
 from db import fetch_one, execute, execute_no_return
+from limits import check_limits, apply_usage_delta
+
 
 bp_submissions = Blueprint("submissions", __name__)
 
@@ -24,6 +26,11 @@ def create_submission():
     client_id = int(data["client_id"])
     id_form = int(data["id_form"])
     id_form_version = int(data["id_form_version"])
+
+    # ✅ LIMIT CHECK: submissions/month
+    ok, payload = check_limits(tenant_id, inc_submissions=1)
+    if not ok:
+        return jsonify(payload), 402
 
     # relação client_clinic precisa existir e estar ativa
     cc = fetch_one("""
@@ -62,7 +69,6 @@ def create_submission():
     if fv.get("status") != "PUBLISHED":
         return jsonify({"message": "form_version must be PUBLISHED to create submissions"}), 400
 
-    # MariaDB-safe: salvar JSON como string
     snapshot_schema_str = _json_dumps(fv["schema_json"])
 
     new_id = execute("""
@@ -99,6 +105,9 @@ def create_submission():
         "client_clinic_id": client_clinic_id,
         "snapshot_schema_json": snapshot_schema_str
     })
+
+    # ✅ increment usage after success
+    apply_usage_delta(tenant_id, inc_submissions=1)
 
     row = fetch_one("""
         SELECT *

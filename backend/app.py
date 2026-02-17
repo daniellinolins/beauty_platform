@@ -25,40 +25,80 @@ def create_app() -> Flask:
 
     app.teardown_appcontext(close_conn)
 
+    # Existing modules (legacy)
     app.register_blueprint(bp_forms)
     app.register_blueprint(bp_forms_versions)
     app.register_blueprint(bp_submissions)
     app.register_blueprint(bp_files)
 
+    # Phase 1 Identity modules (safe import)
     try:
         from routes.auth import bp_auth
         app.register_blueprint(bp_auth)
-    except:
+    except Exception:
         pass
 
     try:
         from routes.associations import bp_assoc
         app.register_blueprint(bp_assoc)
-    except:
+    except Exception:
         pass
 
     try:
         from routes.notifications import bp_notif
         app.register_blueprint(bp_notif)
-    except:
+    except Exception:
         pass
 
     try:
         from routes.services import bp_services
         app.register_blueprint(bp_services)
-    except:
+    except Exception:
         pass
 
     try:
         from routes.clinic_users import bp_clinic_users
         app.register_blueprint(bp_clinic_users)
-    except:
+    except Exception:
         pass
+
+    try:
+        from routes.tenant_usage import bp_tenant_usage
+        app.register_blueprint(bp_tenant_usage)
+    except Exception:
+        pass
+
+    try:
+        from routes.me import bp_me
+        app.register_blueprint(bp_me)
+    except Exception:
+        pass
+
+    # Secure APIs
+    try:
+        from routes.secure_files import bp_secure_files
+        app.register_blueprint(bp_secure_files)
+    except Exception:
+        pass
+
+    try:
+        from routes.secure_submissions import bp_secure_submissions
+        app.register_blueprint(bp_secure_submissions)
+    except Exception:
+        pass
+
+    try:
+        from routes.secure_forms import bp_secure_forms
+        app.register_blueprint(bp_secure_forms)
+    except Exception:
+        pass
+
+    try:
+        from routes.secure_form_versions import bp_secure_form_versions
+        app.register_blueprint(bp_secure_form_versions)
+    except Exception:
+        pass
+
 
     return app
 

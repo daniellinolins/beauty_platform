@@ -4,6 +4,7 @@ from flask import Blueprint, request, jsonify, g
 from db import transaction, execute_in_tx, fetch_one
 from routes.middlewares import tenant_subscription_required, auth_required
 from utils.security import generate_token
+from limits import check_limits, apply_usage_delta  # ✅ usa limits na raiz do backend
 
 bp_assoc = Blueprint("associations", __name__, url_prefix="/api")
 
@@ -118,6 +119,7 @@ def client_authorize_link():
     now = _now()
 
     with transaction() as (conn, cur):
+        # 1) localizar autorização
         auth = fetch_one(
             """
             SELECT authorization_id, tenant_id, clinic_id, client_id, status, expires_at
@@ -147,6 +149,44 @@ def client_authorize_link():
         if int(auth["client_id"]) != int(user["client_id"]):
             return jsonify({"error": "code_not_for_this_client"}), 403
 
+        tenant_id = int(auth["tenant_id"])
+        clinic_id = int(auth["clinic_id"])
+        client_id = int(auth["client_id"])
+
+        # 2) lock do vínculo para evitar corrida e não contar duas vezes
+        cur.execute(
+            """
+            SELECT client_clinic_id, status
+              FROM client_clinic
+             WHERE tenant_id=%s AND clinic_id=%s AND client_id=%s AND deleted_at IS NULL
+             LIMIT 1
+             FOR UPDATE
+            """,
+            (tenant_id, clinic_id, client_id),
+        )
+        cc = cur.fetchone()
+
+        # Se já está ACTIVE, não incrementa nem consome limite (idempotente)
+        if cc and cc.get("status") == "ACTIVE":
+            # marca autorização como USED mesmo assim? melhor: sim, para não reutilizarem.
+            execute_in_tx(
+                cur,
+                """
+                UPDATE client_clinic_authorization
+                   SET status='USED', used_at=%s, updated_at=%s
+                 WHERE authorization_id=%s
+                """,
+                (now, now, auth["authorization_id"]),
+            )
+            return jsonify({"ok": True, "already_active": True, "clinic_id": clinic_id, "tenant_id": tenant_id}), 200
+
+        # 3) limite de clients (contando por vínculo ACTIVE)
+        ok, payload = check_limits(tenant_id, inc_clients=1)
+        if not ok:
+            # Não marca authorization como USED para permitir tentar novamente após upgrade/plano.
+            return jsonify(payload), 402
+
+        # 4) marcar autorização como USED
         execute_in_tx(
             cur,
             """
@@ -157,14 +197,29 @@ def client_authorize_link():
             (now, now, auth["authorization_id"]),
         )
 
-        execute_in_tx(
-            cur,
-            """
-            UPDATE client_clinic
-               SET status='ACTIVE', authorized_at=%s, updated_at=%s
-             WHERE tenant_id=%s AND clinic_id=%s AND client_id=%s AND deleted_at IS NULL
-            """,
-            (now, now, auth["tenant_id"], auth["clinic_id"], auth["client_id"]),
-        )
+        # 5) ativar vínculo (se não existe, cria direto ACTIVE)
+        if not cc:
+            execute_in_tx(
+                cur,
+                """
+                INSERT INTO client_clinic (tenant_id, clinic_id, client_id, status, authorized_at, created_at)
+                VALUES (%s, %s, %s, 'ACTIVE', %s, %s)
+                """,
+                (tenant_id, clinic_id, client_id, now, now),
+            )
+        else:
+            execute_in_tx(
+                cur,
+                """
+                UPDATE client_clinic
+                   SET status='ACTIVE', authorized_at=%s, updated_at=%s
+                 WHERE client_clinic_id=%s
+                """,
+                (now, now, cc["client_clinic_id"]),
+            )
 
-    return jsonify({"ok": True, "clinic_id": auth["clinic_id"], "tenant_id": auth["tenant_id"]})
+    # 6) aplicar delta (fora da transação principal também funcionaria, mas aqui é OK chamar após commit)
+    # Como o apply_usage_delta abre sua própria transação, chamamos aqui após o bloco acima.
+    apply_usage_delta(tenant_id, inc_clients=1)
+
+    return jsonify({"ok": True, "clinic_id": clinic_id, "tenant_id": tenant_id})

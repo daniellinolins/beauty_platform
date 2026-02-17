@@ -1,10 +1,15 @@
 from flask import Blueprint, request, jsonify
-from db import fetch_all, fetch_one, execute, execute_no_return
+from db import fetch_all, fetch_one, execute_no_return
+
+
+from limits import check_limits, apply_usage_delta
+
 
 bp_forms = Blueprint('forms', __name__, url_prefix='/api/forms')
 
 import re
 from datetime import datetime
+
 
 def _slug_code(name: str) -> str:
     base = (name or "").strip().lower()
@@ -12,10 +17,10 @@ def _slug_code(name: str) -> str:
     base = re.sub(r"-+", "-", base).strip("-")
     if not base:
         base = "form"
-    # sufixo curto para evitar colisão
     suffix = datetime.utcnow().strftime("%y%m%d%H%M%S")
     code = f"{base}-{suffix}"
-    return code[:60]  # respeita varchar(60)
+    return code[:60]
+
 
 def _slugify(value: str) -> str:
     import re, unicodedata
@@ -74,7 +79,6 @@ def list_forms():
 
 
 @bp_forms.post('')
-#@bp.route("/api/forms", methods=["POST"])
 def create_form():
     data = request.get_json(force=True) or {}
 
@@ -84,7 +88,18 @@ def create_form():
     status = data.get("status") or "ACTIVE"
     default_language = data.get("default_language") or "pt-PT"
 
-    # gera code se não vier
+    if not tenant_id:
+        return jsonify({"error": "tenant_id is required"}), 400
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+
+    tenant_id = int(tenant_id)
+
+    # ✅ LIMIT CHECK: forms
+    ok, payload = check_limits(tenant_id, inc_forms=1)
+    if not ok:
+        return jsonify(payload), 402
+
     code = (data.get("code") or "").strip()
     if not code:
         code = _slug_code(name)
@@ -107,8 +122,10 @@ def create_form():
         return_lastrowid=True,
     )
 
-    return jsonify({"id_form": new_id, "tenant_id": tenant_id, "code": code}), 201
+    # ✅ Apply usage delta after success
+    apply_usage_delta(tenant_id, inc_forms=1)
 
+    return jsonify({"id_form": new_id, "tenant_id": tenant_id, "code": code}), 201
 
 
 @bp_forms.put('/<int:form_id>')
@@ -126,7 +143,6 @@ def update_form(form_id: int):
         status = 'ACTIVE'
     default_language = _normalize_language(data.get('default_language', 'pt'))
 
-    # code: se vier vazio, mantém o atual; se vier preenchido, normaliza e valida unicidade
     code = data.get('code')
     if code is not None:
         code = code.strip()

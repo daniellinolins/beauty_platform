@@ -3,14 +3,14 @@ import mimetypes
 import hashlib
 from datetime import datetime, timezone
 
-from flask import Blueprint, request, jsonify, send_file
+from flask import Blueprint, request, jsonify, g
 from werkzeug.utils import secure_filename
 
-from db import fetch_one, execute
+from db import fetch_one, execute, transaction, execute_in_tx
+from routes.middlewares import tenant_subscription_required
 from limits import check_limits, apply_usage_delta
 
-
-bp_files = Blueprint("files", __name__, url_prefix="/api/files")
+bp_secure_files = Blueprint("secure_files", __name__, url_prefix="/api/secure/files")
 
 BASE_STORAGE_DIR = os.path.join(os.path.dirname(__file__), "..", "storage")
 
@@ -31,10 +31,6 @@ def sha256_file(path: str) -> str:
     return h.hexdigest()
 
 
-def get_client_ip():
-    return request.headers.get("X-Forwarded-For", request.remote_addr)
-
-
 def tenant_storage_paths(tenant_id: int, category: str):
     tenant_dir = os.path.join(BASE_STORAGE_DIR, f"tenant_{tenant_id}")
     category_dir = os.path.join(tenant_dir, category)
@@ -42,21 +38,52 @@ def tenant_storage_paths(tenant_id: int, category: str):
     return tenant_dir, category_dir
 
 
-@bp_files.route("", methods=["POST"])
-@bp_files.route("/upload", methods=["POST"])
-def upload_file():
+def _user_has_access_to_clinic(tenant_id: int, user_id: int, clinic_id: int) -> bool:
+    """
+    Clinic must belong to tenant and user must have an active user_clinic row.
+    """
+    row = fetch_one(
+        """
+        SELECT 1
+          FROM clinic c
+          JOIN user_clinic uc
+            ON uc.clinic_id = c.clinic_id
+           AND uc.tenant_id = c.tenant_id
+           AND uc.user_id = %s
+           AND uc.active_flag = 1
+         WHERE c.tenant_id = %s
+           AND c.clinic_id = %s
+           AND c.deleted_at IS NULL
+         LIMIT 1
+        """,
+        (user_id, tenant_id, clinic_id),
+    )
+    return row is not None
+
+
+@bp_secure_files.post("/upload")
+@tenant_subscription_required
+def secure_upload_file():
     """
     multipart/form-data:
-      - tenant_id: int (obrigatório)
-      - category: signatures|photos|pdfs|drawings (opcional; default=photos)
+      - clinic_id: int (obrigatório)
+      - category: photos|signatures|pdfs|drawings (opcional; default=photos)
       - purpose: ... (opcional)
       - file: binário (obrigatório)
-    """
-    tenant_id = request.form.get("tenant_id", type=int)
-    if not tenant_id:
-        return jsonify({"error": "tenant_id is required"}), 400
 
-    category = request.form.get("category", "photos").strip().lower()
+    tenant_id vem do token.
+    """
+    tenant_id = int(g.user["tenant_id"])
+    user_id = int(g.user["user_id"])
+
+    clinic_id = request.form.get("clinic_id", type=int)
+    if not clinic_id:
+        return jsonify({"error": "clinic_id is required"}), 400
+
+    if not _user_has_access_to_clinic(tenant_id, user_id, int(clinic_id)):
+        return jsonify({"error": "forbidden_clinic_access"}), 403
+
+    category = (request.form.get("category", "photos") or "photos").strip().lower()
     if category not in ("photos", "signatures", "pdfs", "drawings"):
         category = "photos"
 
@@ -101,87 +128,52 @@ def upload_file():
         if os.path.exists(final_path):
             try:
                 os.remove(temp_path)
-            except:
+            except Exception:
                 pass
         else:
             os.replace(temp_path, final_path)
 
         rel_path = os.path.relpath(final_path, BASE_STORAGE_DIR).replace("\\", "/")
 
-        new_id = execute(
-            """
-            INSERT INTO file_object
-            (tenant_id, storage_provider, storage_path, original_name, mime_type, size_bytes, sha256, created_at, created_by)
-            VALUES
-            (%(tenant_id)s, 'LOCAL', %(storage_path)s, %(original_name)s, %(mime_type)s, %(size_bytes)s, %(sha256)s, NOW(), NULL)
-            """,
-            {
-                "tenant_id": tenant_id,
-                "storage_path": rel_path,
-                "original_name": original_name,
-                "mime_type": mime_type,
-                "size_bytes": size_bytes,
-                "sha256": sha,
-            },
-        )
+        # grava metadados no banco
+        with transaction() as (conn, cur):
+            new_id = execute_in_tx(
+                cur,
+                """
+                INSERT INTO file_object
+                  (tenant_id, storage_provider, storage_path, original_name, mime_type,
+                   size_bytes, sha256, created_at, created_by)
+                VALUES
+                  (%s, 'LOCAL', %s, %s, %s,
+                   %s, %s, NOW(), %s)
+                """,
+                (tenant_id, rel_path, original_name, mime_type, size_bytes, sha, user_id),
+            )
 
-        # ✅ Apply usage delta after successful insert
+        # ✅ Apply usage delta after success
         apply_usage_delta(tenant_id, inc_storage_bytes=size_bytes)
 
         return jsonify(
             {
                 "id_file_object": new_id,
                 "tenant_id": tenant_id,
+                "clinic_id": int(clinic_id),
                 "storage_path": rel_path,
                 "original_name": original_name,
                 "mime_type": mime_type,
                 "size_bytes": size_bytes,
                 "sha256": sha,
-                "ip": get_client_ip(),
-                "signed_at_utc": utc_now_iso(),
+                "created_by": user_id,
+                "created_at_utc": utc_now_iso(),
                 "purpose": purpose,
                 "category": category,
             }
         ), 201
 
     except Exception:
-        # cleanup temp if something fails
         try:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
         except Exception:
             pass
         raise
-
-
-@bp_files.route("/<int:file_id>", methods=["GET"])
-def download_file(file_id: int):
-    tenant_id = request.args.get("tenant_id", type=int)
-    if not tenant_id:
-        return jsonify({"error": "tenant_id is required"}), 400
-
-    row = fetch_one(
-        """
-        SELECT id_file_object, tenant_id, storage_path, original_name, mime_type, deleted_at
-        FROM file_object
-        WHERE id_file_object = %(id)s AND tenant_id = %(tenant_id)s
-        """,
-        {"id": file_id, "tenant_id": tenant_id},
-    )
-
-    if not row or row.get("deleted_at") is not None:
-        return jsonify({"error": "file not found"}), 404
-
-    storage_path = row["storage_path"]
-    abs_path = os.path.join(BASE_STORAGE_DIR, storage_path.replace("/", os.sep))
-
-    if not os.path.exists(abs_path):
-        return jsonify({"error": "file missing on disk"}), 404
-
-    return send_file(
-        abs_path,
-        mimetype=row.get("mime_type") or "application/octet-stream",
-        as_attachment=False,
-        download_name=row.get("original_name") or f"file_{file_id}",
-        max_age=0,
-    )

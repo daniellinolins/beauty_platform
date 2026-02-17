@@ -1,0 +1,33 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Login</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <div class="wrap">
+    <ion-card>
+      <ion-card-header>
+        <ion-card-title>Entrar</ion-card-title>
+        <ion-card-subtitle>Email ou telefone</ion-card-subtitle>
+      </ion-card-header>
+
+      <ion-card-content>
+        <ion-item>
+          <ion-label position="stacked">Email / Telefone</ion-label>
+          <ion-input [(ngModel)]="emailOrPhone" autocomplete="username"></ion-input>
+        </ion-item>
+
+        <ion-item>
+          <ion-label position="stacked">Senha</ion-label>
+          <ion-input [(ngModel)]="password" type="password" autocomplete="current-password"></ion-input>
+        </ion-item>
+
+        <ion-button expand="block" (click)="onLogin()" [disabled]="loading">
+          <ion-spinner *ngIf="loading" name="dots"></ion-spinner>
+          <span *ngIf="!loading">Entrar</span>
+        </ion-button>
+      </ion-card-content>
+    </ion-card>
+  </div>
+</ion-content>

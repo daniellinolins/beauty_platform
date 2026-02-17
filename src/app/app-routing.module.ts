@@ -1,29 +1,40 @@
 import { NgModule } from '@angular/core';
 import { PreloadAllModules, RouterModule, Routes } from '@angular/router';
+import { AuthGuard } from 'src/app/guards/auth.guard';
+
 
 const routes: Routes = [
-  { path: '', redirectTo: 'forms', pathMatch: 'full' },
+  { path: '', redirectTo: 'login', pathMatch: 'full' },
 
-  // Keep the legacy folder route if your starter template still uses it
+  {
+    path: 'login',
+    loadComponent: () => import('./pages/login/login.page').then((m) => m.LoginPage),
+  },
+
   {
     path: 'folder/:id',
+    canActivate: [AuthGuard],
     loadChildren: () => import('./folder/folder.module').then((m) => m.FolderPageModule),
   },
 
   {
     path: 'forms',
+    canActivate: [AuthGuard],
     loadComponent: () => import('./pages/form-list/form-list.page').then((m) => m.FormListPage),
   },
   {
     path: 'forms/builder',
+    canActivate: [AuthGuard],
     loadComponent: () => import('./pages/form-builder/form-builder.page').then((m) => m.FormBuilderPage),
   },
   {
     path: 'forms/builder/:idForm',
+    canActivate: [AuthGuard],
     loadComponent: () => import('./pages/form-builder/form-builder.page').then((m) => m.FormBuilderPage),
   },
   {
     path: 'forms/fill/:idForm',
+    canActivate: [AuthGuard],
     loadComponent: () => import('./pages/form-fill/form-fill.page').then((m) => m.FormFillPage),
   },
 ];

@@ -12,6 +12,23 @@ export class ApiService {
 
   constructor(private http: HttpClient) {}
 
+  // -------------------------------
+  // AUTH / SESSION
+  // -------------------------------
+  login(emailOrPhone: string, password: string): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/auth/login`, {
+      email_or_phone: emailOrPhone,
+      password,
+    });
+  }
+
+  meContext(): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/me/context`);
+  }
+
+  // -------------------------------
+  // LEGACY (mantido para não quebrar)
+  // -------------------------------
   listForms(tenantId: number): Observable<any[]> {
     return this.http.get<any[]>(`${this.baseUrl}/forms`, {
       params: { tenant_id: tenantId },
@@ -69,8 +86,6 @@ export class ApiService {
     schema_json: any;
     status?: VersionStatus;
   }): Observable<any> {
-    // Observação: teu backend lê "status"; aqui você já vinha mandando "version_status".
-    // Mantive pra não quebrar teu fluxo atual. (Backend defaulta pra DRAFT.)
     return this.http.post(`${this.baseUrl}/forms/${req.id_form}/versions`, {
       tenant_id: req.tenant_id,
       version_status: (req.status || 'DRAFT') as VersionStatus,
@@ -98,9 +113,6 @@ export class ApiService {
     );
   }
 
-  // ------------------------------------------------------------
-  // Save Draft (create-or-update)
-  // ------------------------------------------------------------
   saveDraftFormVersion(
     tenantId: number,
     formId: number,

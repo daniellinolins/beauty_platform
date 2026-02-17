@@ -159,7 +159,7 @@ CREATE TABLE `clinic` (
   KEY `fk_clinic_logo_file` (`logo_file_id`),
   CONSTRAINT `fk_clinic_logo_file` FOREIGN KEY (`logo_file_id`) REFERENCES `file_object` (`id_file_object`),
   CONSTRAINT `fk_clinic_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -184,7 +184,7 @@ CREATE TABLE `contact_verification` (
   KEY `ix_ver_user_purpose` (`user_id`,`purpose`),
   KEY `ix_ver_status` (`status`),
   CONSTRAINT `fk_ver_user` FOREIGN KEY (`user_id`) REFERENCES `user_account` (`user_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -211,7 +211,7 @@ CREATE TABLE `file_object` (
   KEY `ix_file_tenant` (`tenant_id`),
   KEY `ix_file_sha` (`tenant_id`,`sha256`),
   CONSTRAINT `fk_file_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=112 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=114 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -354,7 +354,7 @@ CREATE TABLE `form_submission` (
   CONSTRAINT `fk_submission_form_version` FOREIGN KEY (`id_form_version`) REFERENCES `form_version` (`id_form_version`),
   CONSTRAINT `fk_submission_pdf_file` FOREIGN KEY (`pdf_file_id`) REFERENCES `file_object` (`id_file_object`),
   CONSTRAINT `fk_submission_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=81 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=84 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -519,7 +519,7 @@ CREATE TABLE `service` (
   KEY `fk_service_clinic` (`clinic_id`),
   CONSTRAINT `fk_service_clinic` FOREIGN KEY (`clinic_id`) REFERENCES `clinic` (`clinic_id`),
   CONSTRAINT `fk_service_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -551,7 +551,7 @@ CREATE TABLE `subscription_plan` (
   PRIMARY KEY (`plan_id`),
   UNIQUE KEY `uq_plan_code` (`plan_code`),
   KEY `ix_plan_status` (`status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -589,7 +589,7 @@ CREATE TABLE `tenant` (
   KEY `fk_tenant_loginbg_file` (`login_bg_file_id`),
   CONSTRAINT `fk_tenant_loginbg_file` FOREIGN KEY (`login_bg_file_id`) REFERENCES `file_object` (`id_file_object`),
   CONSTRAINT `fk_tenant_logo_file` FOREIGN KEY (`logo_file_id`) REFERENCES `file_object` (`id_file_object`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -624,6 +624,27 @@ CREATE TABLE `tenant_subscription` (
   KEY `fk_ts_plan` (`plan_id`),
   CONSTRAINT `fk_ts_plan` FOREIGN KEY (`plan_id`) REFERENCES `subscription_plan` (`plan_id`),
   CONSTRAINT `fk_ts_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `tenant_usage`
+--
+
+DROP TABLE IF EXISTS `tenant_usage`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `tenant_usage` (
+  `tenant_id` bigint(20) NOT NULL,
+  `month_key` char(7) NOT NULL,
+  `submissions_count_month` int(11) NOT NULL DEFAULT 0,
+  `storage_used_bytes` bigint(20) NOT NULL DEFAULT 0,
+  `forms_count` int(11) NOT NULL DEFAULT 0,
+  `clients_count` int(11) NOT NULL DEFAULT 0,
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`tenant_id`),
+  KEY `ix_tenant_usage_month` (`month_key`),
+  CONSTRAINT `fk_tenant_usage_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -662,7 +683,7 @@ CREATE TABLE `user_account` (
   KEY `ix_user_phone_verified` (`phone_verified`),
   CONSTRAINT `fk_user_client` FOREIGN KEY (`client_id`) REFERENCES `client` (`client_id`),
   CONSTRAINT `fk_user_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -694,7 +715,7 @@ CREATE TABLE `user_clinic` (
   CONSTRAINT `fk_uc_clinic` FOREIGN KEY (`clinic_id`) REFERENCES `clinic` (`clinic_id`),
   CONSTRAINT `fk_uc_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`),
   CONSTRAINT `fk_uc_user` FOREIGN KEY (`user_id`) REFERENCES `user_account` (`user_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -749,4 +770,4 @@ SET character_set_client = @saved_cs_client;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-02-16 18:29:50
+-- Dump completed on 2026-02-17 10:09:01

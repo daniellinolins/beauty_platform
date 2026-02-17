@@ -6,8 +6,9 @@ import { IonicModule, IonicRouteStrategy } from '@ionic/angular';
 
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app-routing.module';
-import { HttpClientModule } from '@angular/common/http';
 
+import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
+import { AuthInterceptor } from './interceptors/auth.interceptor';
 
 @NgModule({
   declarations: [AppComponent],
@@ -15,9 +16,14 @@ import { HttpClientModule } from '@angular/common/http';
     BrowserModule,
     IonicModule.forRoot(),
     AppRoutingModule,
-    HttpClientModule
+    HttpClientModule,
   ],
-  providers: [{ provide: RouteReuseStrategy, useClass: IonicRouteStrategy }],
+  providers: [
+    { provide: RouteReuseStrategy, useClass: IonicRouteStrategy },
+
+    // ✅ adiciona automaticamente "Authorization: Bearer <token>" em todas as chamadas
+    { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },
+  ],
   bootstrap: [AppComponent],
 })
 export class AppModule {}

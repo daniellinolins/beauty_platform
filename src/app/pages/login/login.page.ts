@@ -9,6 +9,8 @@ import { ApiService } from 'src/app/services/api';
 import { AuthService } from '../../services/auth.service';
 import { SessionService } from '../../services/session.service';
 
+import { ClinicContextService } from 'src/app/services/clinic-context.service';
+
 @Component({
   standalone: true,
   selector: 'app-login',
@@ -22,6 +24,7 @@ export class LoginPage {
   loading = false;
 
   constructor(
+    private clinicCtx: ClinicContextService,
     private api: ApiService,
     private auth: AuthService,
     private session: SessionService,
@@ -31,14 +34,21 @@ export class LoginPage {
 
   async onLogin() {
     if (!this.emailOrPhone || !this.password) {
-      (await this.toast.create({ message: 'Informe email/telefone e senha.', duration: 2000 })).present();
+      (
+        await this.toast.create({
+          message: 'Informe email/telefone e senha.',
+          duration: 2000,
+        })
+      ).present();
       return;
     }
 
     this.loading = true;
 
     try {
-      const res = await firstValueFrom(this.api.login(this.emailOrPhone, this.password));
+      const res = await firstValueFrom(
+        this.api.login(this.emailOrPhone, this.password),
+      );
       const token = res?.token || res?.access_token;
 
       if (!token) {
@@ -50,7 +60,23 @@ export class LoginPage {
       // carrega /api/me/context (se falhar, cai no catch)
       await this.session.loadContext();
 
-      // rota principal do app
+      await this.session.loadContext();
+      const ctx = this.session.context;
+
+      const mode = this.clinicCtx.initFromContext(ctx);
+
+      if (mode === 'NONE') {
+        // sem clínicas
+        await this.router.navigateByUrl('/login');
+        return;
+      }
+
+      if (mode === 'MANY') {
+        await this.router.navigateByUrl('/select-clinic');
+        return;
+      }
+
+      // ONE
       await this.router.navigateByUrl('/folder/inbox');
     } catch (e: any) {
       const msg = e?.error?.error || e?.message || 'Falha no login';

@@ -1,0 +1,71 @@
+<ion-header>
+  <ion-toolbar>
+    <ion-title>Clientes da Clínica</ion-title>
+  </ion-toolbar>
+
+  <ion-toolbar>
+    <ion-segment [value]="segment" (ionChange)="onSegmentChanged($event)">
+      <ion-segment-button value="ACTIVE">
+        <ion-label>Ativos</ion-label>
+      </ion-segment-button>
+      <ion-segment-button value="PENDING">
+        <ion-label>Pendentes</ion-label>
+      </ion-segment-button>
+    </ion-segment>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <ion-refresher slot="fixed" (ionRefresh)="loadClients($event.target)">
+    <ion-refresher-content></ion-refresher-content>
+  </ion-refresher>
+
+  <ion-spinner *ngIf="loading" name="crescent"></ion-spinner>
+
+  <ion-list *ngIf="!loading && clients.length">
+    <ion-item *ngFor="let c of clients; trackBy: trackByClientId">
+      <ion-label>
+        <h2>{{ c.full_name || ('Cliente #' + c.client_id) }}</h2>
+        <p *ngIf="c.email">{{ c.email }}</p>
+        <p *ngIf="c.phone">{{ c.phone }}</p>
+        <p>
+          <strong>Status vínculo:</strong> {{ c.relationship_status || '-' }}
+        </p>
+        <p *ngIf="c.relationship_start">
+          <strong>Início:</strong> {{ c.relationship_start }}
+        </p>
+      </ion-label>
+
+      <ion-badge slot="end" *ngIf="segment === 'ACTIVE'" color="success">ACTIVE</ion-badge>
+      <ion-badge slot="end" *ngIf="segment === 'PENDING'" color="warning">PENDING</ion-badge>
+    </ion-item>
+  </ion-list>
+
+  <ion-card *ngIf="!loading && !clients.length">
+    <ion-card-header>
+      <ion-card-title>Nenhum cliente</ion-card-title>
+      <ion-card-subtitle>
+        {{ segment === 'ACTIVE'
+          ? 'Nenhum cliente ativo associado a esta clínica.'
+          : 'Nenhuma solicitação pendente no momento.' }}
+      </ion-card-subtitle>
+    </ion-card-header>
+    <ion-card-content>
+      Use os botões abaixo para solicitar associação ou cadastrar um novo cliente.
+    </ion-card-content>
+  </ion-card>
+
+  <ion-fab slot="fixed" vertical="bottom" horizontal="end">
+    <ion-fab-button>
+      <ion-icon name="add"></ion-icon>
+    </ion-fab-button>
+    <ion-fab-list side="top">
+      <ion-fab-button (click)="openRequestLinkModal()">
+        <ion-icon name="link-outline"></ion-icon>
+      </ion-fab-button>
+      <ion-fab-button (click)="openCreateClientModal()">
+        <ion-icon name="person-add-outline"></ion-icon>
+      </ion-fab-button>
+    </ion-fab-list>
+  </ion-fab>
+</ion-content>

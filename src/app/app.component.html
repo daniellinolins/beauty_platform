@@ -6,6 +6,20 @@
           <ion-list-header>Inbox</ion-list-header>
           <ion-note>hi&#64;ionicframework.com</ion-note>
 
+          <!-- ✅ NOVO: Clientes da Clínica -->
+          <ion-menu-toggle auto-hide="true">
+            <ion-item routerLink="/clinic/clients" routerDirection="root">
+              <ion-label>Clientes da Clínica</ion-label>
+            </ion-item>
+          </ion-menu-toggle>
+
+          <!-- ✅ NOVO: Trocar Clínica -->
+          <ion-menu-toggle auto-hide="true">
+            <ion-item routerLink="/select-clinic" routerDirection="root">
+              <ion-label>Trocar Clínica</ion-label>
+            </ion-item>
+          </ion-menu-toggle>
+
           @for (p of appPages; track p; let i = $index) {
             <ion-menu-toggle auto-hide="false">
               <ion-item
@@ -44,13 +58,12 @@
         </ion-list>
 
         <!-- 🔴 BOTÃO SAIR -->
-         <ion-list id="lista-sair">
-        <ion-item button (click)="logout()" lines="none" class="logout-item">
-          <ion-icon slot="start" name="log-out-outline"></ion-icon>
-          <ion-label>Sair</ion-label>
-        </ion-item>
+        <ion-list id="lista-sair">
+          <ion-item button (click)="logout()" lines="none" class="logout-item">
+            <ion-icon slot="start" name="log-out-outline"></ion-icon>
+            <ion-label>Sair</ion-label>
+          </ion-item>
         </ion-list>
-
       </ion-content>
     </ion-menu>
     <ion-router-outlet id="main-content"></ion-router-outlet>

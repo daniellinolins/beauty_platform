@@ -13,9 +13,11 @@ import {
   IonIcon,
   IonButtons,
   IonButton,
+  ToastController,
 } from '@ionic/angular/standalone';
 import { Router, RouterModule } from '@angular/router';
 import { ApiService } from 'src/app/services/api';
+import { SessionService } from 'src/app/services/session.service';
 
 @Component({
   selector: 'app-form-list',
@@ -24,8 +26,6 @@ import { ApiService } from 'src/app/services/api';
   standalone: true,
   imports: [
     CommonModule,
-
-    // ✅ Isso habilita routerLink / routerLinkActive no template
     RouterModule,
 
     IonContent,
@@ -44,22 +44,68 @@ import { ApiService } from 'src/app/services/api';
 })
 export class FormListPage {
   forms: any[] = [];
-  tenantId = 1;
+  tenantId: number | null = null;
 
   // ✅ Se seu app usa Tabs e o caminho real for /tabs/forms,
   // troque aqui para: '/tabs/forms'
   private formsBasePath = '/forms';
 
-  constructor(private api: ApiService, private router: Router) {}
+  constructor(
+    private api: ApiService,
+    private session: SessionService,
+    private router: Router,
+    private toastCtrl: ToastController
+  ) {}
 
-  ionViewWillEnter() {
-    this.load();
+  async ionViewWillEnter() {
+    await this.load();
   }
 
-  load() {
+  private async resolveTenantIdFromContext(): Promise<number | null> {
+    // garante contexto carregado
+    if (!this.session.context) {
+      try {
+        await this.session.loadContext();
+      } catch (e) {
+        console.error(e);
+        return null;
+      }
+    }
+
+    const ctx = this.session.context;
+    const user = ctx?.user;
+    if (!user) return null;
+
+    // Clinic user: tenant_id vem do user
+    if (user.user_type !== 'CLIENT') {
+      const tid = Number(user.tenant_id);
+      return tid && !Number.isNaN(tid) ? tid : null;
+    }
+
+    // CLIENT: pode ter múltiplos tenants; aqui usamos o primeiro vínculo por padrão
+    const clinics = Array.isArray(ctx?.clinics) ? ctx.clinics : [];
+    if (clinics.length === 0) return null;
+
+    const tid = Number(clinics[0]?.tenant_id);
+    return tid && !Number.isNaN(tid) ? tid : null;
+  }
+
+  async load() {
+    const tid = await this.resolveTenantIdFromContext();
+    if (!tid) {
+      await this.toast('Não foi possível resolver o tenant do usuário logado.', 'danger');
+      this.forms = [];
+      return;
+    }
+
+    this.tenantId = tid;
+
     this.api.listForms(this.tenantId).subscribe({
       next: (list) => (this.forms = list || []),
-      error: (err) => console.error(err),
+      error: async (err) => {
+        console.error(err);
+        await this.toast('Erro ao listar formulários.', 'danger');
+      },
     });
   }
 
@@ -75,12 +121,16 @@ export class FormListPage {
     return `${this.formsBasePath}/fill/${form.id_form}`;
   }
 
-  // Mantidos (caso você use em algum lugar)
   editForm(form: any) {
     this.router.navigateByUrl(this.editUrl(form));
   }
 
   openForm(form: any) {
     this.router.navigateByUrl(this.fillUrl(form));
+  }
+
+  private async toast(message: string, color: 'success' | 'warning' | 'danger' | 'primary' = 'primary') {
+    const t = await this.toastCtrl.create({ message, duration: 2500, color });
+    await t.present();
   }
 }

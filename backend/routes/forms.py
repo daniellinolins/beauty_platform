@@ -1,14 +1,14 @@
-from flask import Blueprint, request, jsonify
-from db import fetch_all, fetch_one, execute_no_return
-
-
-from limits import check_limits, apply_usage_delta
-
-
-bp_forms = Blueprint('forms', __name__, url_prefix='/api/forms')
-
-import re
+from flask import Blueprint, request, jsonify, g
 from datetime import datetime
+import re
+
+from db import fetch_all, fetch_one, execute_no_return
+from routes.middlewares import tenant_subscription_required
+
+# -----------------------------
+# Legacy endpoints (kept as-is)
+# -----------------------------
+bp_forms = Blueprint('forms', __name__, url_prefix='/api/forms')
 
 
 def _slug_code(name: str) -> str:
@@ -23,7 +23,7 @@ def _slug_code(name: str) -> str:
 
 
 def _slugify(value: str) -> str:
-    import re, unicodedata
+    import unicodedata
     value = (value or '').strip()
     value = unicodedata.normalize('NFKD', value)
     value = value.encode('ascii', 'ignore').decode('ascii')
@@ -67,12 +67,12 @@ def list_forms():
         return jsonify({'error': 'tenant_id is required'}), 400
 
     rows = fetch_all(
-        """
+        '''
         SELECT id_form, tenant_id, name, description, status, default_language, code
         FROM form
         WHERE tenant_id=%s
         ORDER BY id_form DESC
-        """,
+        ''',
         (tenant_id,),
     )
     return jsonify(rows)
@@ -88,26 +88,14 @@ def create_form():
     status = data.get("status") or "ACTIVE"
     default_language = data.get("default_language") or "pt-PT"
 
-    if not tenant_id:
-        return jsonify({"error": "tenant_id is required"}), 400
-    if not name:
-        return jsonify({"error": "name is required"}), 400
-
-    tenant_id = int(tenant_id)
-
-    # ✅ LIMIT CHECK: forms
-    ok, payload = check_limits(tenant_id, inc_forms=1)
-    if not ok:
-        return jsonify(payload), 402
-
     code = (data.get("code") or "").strip()
     if not code:
         code = _slug_code(name)
 
-    sql = """
+    sql = '''
         INSERT INTO form (tenant_id, code, name, description, status, default_language)
         VALUES (%(tenant_id)s, %(code)s, %(name)s, %(description)s, %(status)s, %(default_language)s)
-    """
+    '''
 
     new_id = execute_no_return(
         sql,
@@ -121,9 +109,6 @@ def create_form():
         },
         return_lastrowid=True,
     )
-
-    # ✅ Apply usage delta after success
-    apply_usage_delta(tenant_id, inc_forms=1)
 
     return jsonify({"id_form": new_id, "tenant_id": tenant_id, "code": code}), 201
 
@@ -153,19 +138,19 @@ def update_form(form_id: int):
 
     if code is None:
         execute_no_return(
-            """
+            '''
             UPDATE form
                SET name=%s,
                    description=%s,
                    status=%s,
                    default_language=%s
              WHERE id_form=%s AND tenant_id=%s
-            """,
+            ''',
             (name, description, status, default_language, form_id, tenant_id),
         )
     else:
         execute_no_return(
-            """
+            '''
             UPDATE form
                SET name=%s,
                    description=%s,
@@ -173,12 +158,196 @@ def update_form(form_id: int):
                    default_language=%s,
                    code=%s
              WHERE id_form=%s AND tenant_id=%s
-            """,
+            ''',
             (name, description, status, default_language, code, form_id, tenant_id),
         )
 
     row = fetch_one(
         "SELECT id_form, tenant_id, name, description, status, default_language, code FROM form WHERE id_form=%s",
         (form_id,),
+    )
+    return jsonify(row)
+
+
+# -----------------------------
+# Secure endpoints (new)
+# -----------------------------
+bp_secure_forms = Blueprint('secure_forms', __name__, url_prefix='/api/secure/forms')
+
+
+def _require_clinic_id_from_request():
+    clinic_id = request.args.get("clinic_id")
+    if clinic_id is not None:
+        try:
+            return int(clinic_id)
+        except Exception:
+            return None
+
+    data = request.get_json(silent=True) or {}
+    if "clinic_id" in data:
+        try:
+            return int(data.get("clinic_id"))
+        except Exception:
+            return None
+
+    return None
+
+
+def _user_has_access_to_clinic(tenant_id: int, user_id: int, clinic_id: int) -> bool:
+    row = fetch_one(
+        '''
+        SELECT 1
+          FROM clinic c
+          JOIN user_clinic uc
+            ON uc.clinic_id = c.clinic_id
+           AND uc.user_id = %s
+           AND uc.tenant_id = c.tenant_id
+           AND uc.active_flag = 1
+         WHERE c.tenant_id = %s
+           AND c.clinic_id = %s
+           AND c.deleted_at IS NULL
+         LIMIT 1
+        ''',
+        (user_id, tenant_id, clinic_id),
+    )
+    return row is not None
+
+
+@bp_secure_forms.get('')
+@tenant_subscription_required
+def secure_list_forms():
+    tenant_id = int(g.user["tenant_id"])
+    user_id = int(g.user["user_id"])
+
+    clinic_id = _require_clinic_id_from_request()
+    if not clinic_id:
+        return jsonify({"error": "missing_or_invalid_clinic_id"}), 400
+
+    if not _user_has_access_to_clinic(tenant_id, user_id, clinic_id):
+        return jsonify({"error": "forbidden_clinic_access"}), 403
+
+    # NOTE: form is tenant-scoped (no clinic_id column), so returns all tenant forms.
+    rows = fetch_all(
+        '''
+        SELECT id_form, tenant_id, name, description, status, default_language, code
+          FROM form
+         WHERE tenant_id=%s
+         ORDER BY id_form DESC
+        ''',
+        (tenant_id,),
+    )
+    return jsonify(rows)
+
+
+@bp_secure_forms.post('')
+@tenant_subscription_required
+def secure_create_form():
+    tenant_id = int(g.user["tenant_id"])
+    user_id = int(g.user["user_id"])
+
+    data = request.get_json(force=True) or {}
+
+    clinic_id = _require_clinic_id_from_request()
+    if not clinic_id:
+        return jsonify({"error": "missing_or_invalid_clinic_id"}), 400
+
+    if not _user_has_access_to_clinic(tenant_id, user_id, clinic_id):
+        return jsonify({"error": "forbidden_clinic_access"}), 403
+
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name_is_required"}), 400
+
+    description = data.get("description")
+    status = (data.get("status") or "ACTIVE").upper()
+    if status not in ("ACTIVE", "INACTIVE"):
+        status = "ACTIVE"
+
+    default_language = data.get("default_language") or "pt-PT"
+
+    code = (data.get("code") or "").strip()
+    if not code:
+        code = _slug_code(name)
+    else:
+        code = _generate_unique_code(tenant_id, code)
+
+    new_id = execute_no_return(
+        '''
+        INSERT INTO form (tenant_id, code, name, description, status, default_language)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ''',
+        (tenant_id, code, name, description, status, default_language),
+        return_lastrowid=True,
+    )
+
+    return jsonify({"id_form": new_id, "tenant_id": tenant_id, "code": code}), 201
+
+
+@bp_secure_forms.put('/<int:form_id>')
+@tenant_subscription_required
+def secure_update_form(form_id: int):
+    tenant_id = int(g.user["tenant_id"])
+    user_id = int(g.user["user_id"])
+
+    data = request.get_json(silent=True) or {}
+
+    clinic_id = _require_clinic_id_from_request()
+    if not clinic_id:
+        return jsonify({"error": "missing_or_invalid_clinic_id"}), 400
+
+    if not _user_has_access_to_clinic(tenant_id, user_id, clinic_id):
+        return jsonify({"error": "forbidden_clinic_access"}), 403
+
+    exists = fetch_one(
+        "SELECT 1 AS ok FROM form WHERE id_form=%s AND tenant_id=%s LIMIT 1",
+        (form_id, tenant_id),
+    )
+    if not exists:
+        return jsonify({"error": "form_not_found"}), 404
+
+    name = data.get('name')
+    description = data.get('description')
+    status = (data.get('status') or 'ACTIVE').upper()
+    if status not in ('ACTIVE', 'INACTIVE'):
+        status = 'ACTIVE'
+    default_language = data.get('default_language', 'pt-PT')
+
+    code = data.get('code')
+    if code is not None:
+        code = (code or '').strip()
+        if code:
+            code = _generate_unique_code(tenant_id, code)
+        else:
+            code = None
+
+    if code is None:
+        execute_no_return(
+            '''
+            UPDATE form
+               SET name=%s,
+                   description=%s,
+                   status=%s,
+                   default_language=%s
+             WHERE id_form=%s AND tenant_id=%s
+            ''',
+            (name, description, status, default_language, form_id, tenant_id),
+        )
+    else:
+        execute_no_return(
+            '''
+            UPDATE form
+               SET name=%s,
+                   description=%s,
+                   status=%s,
+                   default_language=%s,
+                   code=%s
+             WHERE id_form=%s AND tenant_id=%s
+            ''',
+            (name, description, status, default_language, code, form_id, tenant_id),
+        )
+
+    row = fetch_one(
+        "SELECT id_form, tenant_id, name, description, status, default_language, code FROM form WHERE id_form=%s AND tenant_id=%s",
+        (form_id, tenant_id),
     )
     return jsonify(row)

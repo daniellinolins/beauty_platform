@@ -2,7 +2,10 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { ApiService } from 'src/app/services/api';
+import { SessionService } from 'src/app/services/session.service';
+import { environment } from 'src/environments/environment';
 import { AlertController, ModalController, NavController } from '@ionic/angular';
 import {
   IonBackButton,
@@ -72,8 +75,8 @@ type DefaultLanguage = 'pt-PT' | 'pt-BR' | 'en-US' | 'es-ES';
 })
 export class FormBuilderPage implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
-
-  tenantId = 1;
+  tenantId: number | null = null;
+  clinicId: number | null = null;
 
   idForm: number | null = null;
   idFormVersion: number | null = null;
@@ -137,12 +140,15 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   constructor(
     private route: ActivatedRoute,
     private api: ApiService,
+    private session: SessionService,
+    private http: HttpClient,
     private nav: NavController,
     private alertCtrl: AlertController,
     private modalCtrl: ModalController,
-  ) {}
+  ) {
+  }
 
-  ngOnInit() {
+  async ngOnInit() {
     // ✅ sua rota usa :idForm
     const id = this.route.snapshot.paramMap.get('idForm');
     this.idForm = id ? Number(id) : null;
@@ -150,13 +156,66 @@ export class FormBuilderPage implements OnInit, OnDestroy {
     const v = this.route.snapshot.queryParamMap.get('version');
     this.idFormVersion = v ? Number(v) : null;
 
+    await this.resolveContextDefaults();
     this.load();
   }
+
 
   ngOnDestroy() {
     this.destroy$.next();
     this.destroy$.complete();
   }
+
+  // ----------------------------
+  // Context (tenant/clinic) from /api/me/context
+  // ----------------------------
+  private async resolveContextDefaults() {
+    try {
+      if (!this.session.context) {
+        await this.session.loadContext();
+      }
+      const ctx: any = this.session.context;
+      const user: any = ctx?.user;
+      const clinics: any[] = Array.isArray(ctx?.clinics) ? ctx.clinics : [];
+
+      if (user?.user_type !== 'CLIENT' && user?.tenant_id) {
+        this.tenantId = Number(user.tenant_id);
+      } else if (clinics.length > 0 && clinics[0]?.tenant_id) {
+        this.tenantId = Number(clinics[0].tenant_id);
+      }
+
+      if (clinics.length > 0 && clinics[0]?.clinic_id) {
+        this.clinicId = Number(clinics[0].clinic_id);
+      }
+    } catch (e) {
+      console.error('Falha ao carregar contexto do usuário:', e);
+    }
+  }
+
+  private async requireTenantId(): Promise<number> {
+    if (!this.tenantId) {
+      await this.resolveContextDefaults();
+    }
+    if (!this.tenantId) {
+      throw new Error('tenant_id não resolvido. Faça login novamente.');
+    }
+    return this.tenantId;
+  }
+
+  private async publishLegacyHttp(mode: 'replace' | 'error') {
+    if (!this.idForm || !this.idFormVersion) throw new Error('Form/version inválidos para publicar.');
+    const tenantId = await this.requireTenantId();
+
+    const url = `${environment.apiBaseUrl}/api/forms/${this.idForm}/versions/${this.idFormVersion}/publish?mode=${mode}`;
+
+    const body: any = {
+      tenant_id: tenantId,
+      schema_obj: this.schema,
+    };
+
+    return await firstValueFrom(this.http.post<any>(url, body).pipe(takeUntil(this.destroy$)));
+  }
+
 
   private normalizeDefaultLanguage(input: any): DefaultLanguage {
     const s = (input ?? '').toString();
@@ -233,7 +292,9 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   private async loadFormMeta() {
     if (!this.idForm) return;
 
-    const list = await firstValueFrom(this.api.listForms(this.tenantId).pipe(takeUntil(this.destroy$)));
+    const tenantId = await this.requireTenantId();
+
+    const list = await firstValueFrom(this.api.listForms(tenantId).pipe(takeUntil(this.destroy$)));
     const found = (list || []).find((f: any) => Number(f?.id_form) === Number(this.idForm));
 
     if (!found) return;
@@ -294,8 +355,10 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   async refreshVersions() {
     if (!this.idForm) return;
 
+    const tenantId = await this.requireTenantId();
+
     const list = await firstValueFrom(
-      this.api.listFormVersions(this.tenantId, this.idForm).pipe(takeUntil(this.destroy$)),
+      this.api.listFormVersions(tenantId, this.idForm).pipe(takeUntil(this.destroy$)),
     );
 
     const anyList: any = list as any;
@@ -305,8 +368,10 @@ export class FormBuilderPage implements OnInit, OnDestroy {
   async loadVersion(idFormVersion: number) {
     if (!this.idForm) return;
 
+    const tenantId = await this.requireTenantId();
+
     const version = await firstValueFrom(
-      this.api.getFormVersion(this.idForm, idFormVersion, this.tenantId).pipe(takeUntil(this.destroy$)),
+      this.api.getFormVersion(this.idForm, idFormVersion, tenantId).pipe(takeUntil(this.destroy$)),
     );
 
     const v: any = version || {};
@@ -549,11 +614,12 @@ export class FormBuilderPage implements OnInit, OnDestroy {
 
     try {
       this.normalizeSchemaForUi();
+      const tenantId = await this.requireTenantId();
 
       const created = await firstValueFrom(
         this.api
           .createForm({
-            tenant_id: this.tenantId,
+            tenant_id: tenantId,
             name: this.formName,
             description: this.formDescription,
             status: this.formStatus,
@@ -570,7 +636,7 @@ export class FormBuilderPage implements OnInit, OnDestroy {
       const createdV = await firstValueFrom(
         this.api
           .createFormVersion({
-            tenant_id: this.tenantId,
+            tenant_id: tenantId,
             id_form: this.idForm,
             status: 'DRAFT',
             schema_json: this.schema,
@@ -602,6 +668,7 @@ export class FormBuilderPage implements OnInit, OnDestroy {
 
     try {
       this.normalizeSchemaForUi();
+      const tenantId = await this.requireTenantId();
 
       if (!this.idForm) {
         if (!this.formName?.trim()) {
@@ -617,7 +684,7 @@ export class FormBuilderPage implements OnInit, OnDestroy {
 
       const saved = await firstValueFrom(
         this.api
-          .saveDraftFormVersion(this.tenantId, this.idForm, {
+          .saveDraftFormVersion(tenantId, this.idForm, {
             version_id: this.idFormVersion ?? null,
             schema_json: this.schema,
             checksum_sha256: checksum || undefined,
@@ -705,18 +772,8 @@ export class FormBuilderPage implements OnInit, OnDestroy {
 
       const mode = this.publishReplacePrevious ? 'replace' : 'error';
 
-      const published = await firstValueFrom(
-        this.api
-          .publishFormVersion({
-            tenant_id: this.tenantId,
-            id_form: this.idForm,
-            id_form_version: this.idFormVersion!,
-            mode,
-          })
-          .pipe(takeUntil(this.destroy$)),
-      );
-
-      this.versionStatus = (published?.status || 'PUBLISHED') as any;
+      const published = await this.publishLegacyHttp(mode as any);
+this.versionStatus = (published?.status || 'PUBLISHED') as any;
       this.versionNumber = published?.version_number ?? this.versionNumber;
 
       await this.refreshVersions();
@@ -742,11 +799,12 @@ export class FormBuilderPage implements OnInit, OnDestroy {
 
     try {
       this.normalizeSchemaForUi();
+      const tenantId = await this.requireTenantId();
 
       const createdV = await firstValueFrom(
         this.api
           .createFormVersion({
-            tenant_id: this.tenantId,
+            tenant_id: tenantId,
             id_form: this.idForm,
             status: 'DRAFT',
             schema_json: this.schema,

@@ -4,7 +4,7 @@ from flask import Blueprint, request, jsonify, g
 from db import transaction, execute_in_tx, fetch_one
 from routes.middlewares import tenant_subscription_required, auth_required
 from utils.security import generate_token
-from limits import check_limits, apply_usage_delta  # ✅ usa limits na raiz do backend
+from limits import check_limits, apply_usage_delta  # ✅ limits na raiz do backend
 
 bp_assoc = Blueprint("associations", __name__, url_prefix="/api")
 
@@ -16,20 +16,36 @@ def _now():
 @bp_assoc.post("/clinic/clients/request-link")
 @tenant_subscription_required
 def clinic_request_link():
-    data = request.get_json(force=True)
-    tenant_id = g.user["tenant_id"]
+    """
+    Clínica solicita vínculo para um client_id EXISTENTE.
+
+    Payload:
+    {
+      "clinic_id": 5,
+      "client_id": 123,
+      "channel": "INBOX" | "EMAIL" | "PUSH" | "SMS" (por enquanto INBOX)
+    }
+
+    Retorna dev_code para testes.
+    """
+    data = request.get_json(force=True) or {}
+    tenant_id = int(g.user["tenant_id"])
     clinic_id = data.get("clinic_id")
     client_id = data.get("client_id")
-    channel = data.get("channel", "INBOX")
+    channel = (data.get("channel") or "INBOX").upper()
 
     if not clinic_id or not client_id:
         return jsonify({"error": "missing_fields"}), 400
+
+    clinic_id = int(clinic_id)
+    client_id = int(client_id)
 
     now = _now()
     expires_at = now + timedelta(minutes=15)
     code = generate_token(12)
 
     with transaction() as (conn, cur):
+        # relacionamento já existe?
         row = fetch_one(
             """
             SELECT client_clinic_id, status
@@ -40,10 +56,12 @@ def clinic_request_link():
             (tenant_id, clinic_id, client_id),
         )
 
+        # já ativo? idempotente
         if row and row["status"] == "ACTIVE":
             return jsonify({"ok": True, "already_active": True}), 200
 
         if not row:
+            # cria PENDING (relationship_start tem default CURRENT_TIMESTAMP)
             execute_in_tx(
                 cur,
                 """
@@ -53,16 +71,23 @@ def clinic_request_link():
                 (tenant_id, clinic_id, client_id, now),
             )
         else:
+            # se já existia e estava INACTIVE/PENDING, volta para PENDING e limpa encerramento/inativação
             execute_in_tx(
                 cur,
                 """
                 UPDATE client_clinic
-                   SET status='PENDING', updated_at=%s
+                   SET status='PENDING',
+                       relationship_end=NULL,
+                       inactivated_by_type=NULL,
+                       inactivated_reason=NULL,
+                       updated_at=%s,
+                       updated_by=%s
                  WHERE client_clinic_id=%s
                 """,
-                (now, row["client_clinic_id"]),
+                (now, int(g.user["user_id"]), row["client_clinic_id"]),
             )
 
+        # cria autorização
         execute_in_tx(
             cur,
             """
@@ -70,9 +95,10 @@ def clinic_request_link():
               (tenant_id, clinic_id, client_id, code, channel, status, expires_at, created_at, created_by)
             VALUES (%s, %s, %s, %s, %s, 'SENT', %s, %s, %s)
             """,
-            (tenant_id, clinic_id, client_id, code, channel, expires_at, now, g.user["user_id"]),
+            (tenant_id, clinic_id, client_id, code, channel, expires_at, now, int(g.user["user_id"])),
         )
 
+        # inbox para o cliente (se existir user_account CLIENT)
         u = fetch_one(
             """
             SELECT user_id
@@ -91,7 +117,7 @@ def clinic_request_link():
                 VALUES (%s, %s, %s, %s, 'AUTH_CODE', 'INBOX', %s, %s, %s)
                 """,
                 (
-                    u["user_id"],
+                    int(u["user_id"]),
                     tenant_id,
                     "Código de autorização",
                     "Use o código para autorizar o vínculo com a clínica.",
@@ -107,14 +133,29 @@ def clinic_request_link():
 @bp_assoc.post("/client/clinics/authorize")
 @auth_required
 def client_authorize_link():
-    data = request.get_json(force=True)
-    code = data.get("code")
+    """
+    Cliente autoriza vínculo usando o code recebido.
+
+    Body:
+      { "code": "XXXX" }
+
+    Efeito:
+      - client_clinic.status -> ACTIVE
+      - relationship_start -> NOW() (sobrescreve valor anterior se estava PENDING)
+      - relationship_end -> NULL
+      - authorization.status -> USED
+      - valida limite de clientes (inc_clients=1) apenas quando realmente ativa (idempotente)
+    """
+    data = request.get_json(force=True) or {}
+    code = (data.get("code") or "").strip()
     if not code:
         return jsonify({"error": "missing_code"}), 400
 
     user = g.user
     if user.get("user_type") != "CLIENT":
         return jsonify({"error": "only_client_can_authorize"}), 403
+    if not user.get("client_id"):
+        return jsonify({"error": "client_id_missing_in_token"}), 403
 
     now = _now()
 
@@ -132,8 +173,10 @@ def client_authorize_link():
 
         if not auth:
             return jsonify({"error": "invalid_code"}), 400
+
         if auth["status"] != "SENT":
             return jsonify({"error": "code_not_available"}), 400
+
         if auth["expires_at"] and now > auth["expires_at"]:
             execute_in_tx(
                 cur,
@@ -153,7 +196,7 @@ def client_authorize_link():
         clinic_id = int(auth["clinic_id"])
         client_id = int(auth["client_id"])
 
-        # 2) lock do vínculo para evitar corrida e não contar duas vezes
+        # 2) lock do vínculo para evitar corrida
         cur.execute(
             """
             SELECT client_clinic_id, status
@@ -166,9 +209,8 @@ def client_authorize_link():
         )
         cc = cur.fetchone()
 
-        # Se já está ACTIVE, não incrementa nem consome limite (idempotente)
+        # idempotente: já ativo
         if cc and cc.get("status") == "ACTIVE":
-            # marca autorização como USED mesmo assim? melhor: sim, para não reutilizarem.
             execute_in_tx(
                 cur,
                 """
@@ -180,13 +222,12 @@ def client_authorize_link():
             )
             return jsonify({"ok": True, "already_active": True, "clinic_id": clinic_id, "tenant_id": tenant_id}), 200
 
-        # 3) limite de clients (contando por vínculo ACTIVE)
+        # 3) valida limite (somente se vai ativar agora)
         ok, payload = check_limits(tenant_id, inc_clients=1)
         if not ok:
-            # Não marca authorization como USED para permitir tentar novamente após upgrade/plano.
             return jsonify(payload), 402
 
-        # 4) marcar autorização como USED
+        # 4) marca authorization como USED
         execute_in_tx(
             cur,
             """
@@ -197,13 +238,15 @@ def client_authorize_link():
             (now, now, auth["authorization_id"]),
         )
 
-        # 5) ativar vínculo (se não existe, cria direto ACTIVE)
+        # 5) ativa vínculo (se não existe, cria ACTIVE)
         if not cc:
             execute_in_tx(
                 cur,
                 """
-                INSERT INTO client_clinic (tenant_id, clinic_id, client_id, status, authorized_at, created_at)
-                VALUES (%s, %s, %s, 'ACTIVE', %s, %s)
+                INSERT INTO client_clinic
+                  (tenant_id, clinic_id, client_id, status, relationship_start, relationship_end, created_at)
+                VALUES
+                  (%s, %s, %s, 'ACTIVE', %s, NULL, %s)
                 """,
                 (tenant_id, clinic_id, client_id, now, now),
             )
@@ -212,14 +255,19 @@ def client_authorize_link():
                 cur,
                 """
                 UPDATE client_clinic
-                   SET status='ACTIVE', authorized_at=%s, updated_at=%s
+                   SET status='ACTIVE',
+                       relationship_start=%s,
+                       relationship_end=NULL,
+                       inactivated_by_type=NULL,
+                       inactivated_reason=NULL,
+                       updated_at=%s,
+                       updated_by=%s
                  WHERE client_clinic_id=%s
                 """,
-                (now, now, cc["client_clinic_id"]),
+                (now, now, int(user["user_id"]), cc["client_clinic_id"]),
             )
 
-    # 6) aplicar delta (fora da transação principal também funcionaria, mas aqui é OK chamar após commit)
-    # Como o apply_usage_delta abre sua própria transação, chamamos aqui após o bloco acima.
-    apply_usage_delta(tenant_id, inc_clients=1)
+        # 6) aplica consumo no tenant_usage (clients_count +1)
+        apply_usage_delta(tenant_id, inc_clients=1)
 
-    return jsonify({"ok": True, "clinic_id": clinic_id, "tenant_id": tenant_id})
+    return jsonify({"ok": True, "clinic_id": clinic_id, "tenant_id": tenant_id}), 200

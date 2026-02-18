@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from './services/auth.service';
 import { SessionService } from './services/session.service';
+import { MenuController } from '@ionic/angular';
 
 @Component({
   selector: 'app-root',
@@ -26,6 +27,7 @@ export class AppComponent {
     private router: Router,
     private auth: AuthService,
     private session: SessionService,
+    private menu: MenuController,
   ) {
     this.bootstrap();
   }
@@ -49,5 +51,12 @@ export class AppComponent {
     if (!this.router.url.startsWith('/login')) {
       this.router.navigateByUrl('/login');
     }
+  }
+
+  async logout() {
+    await this.menu.close();
+    this.auth.logout();
+    this.session.clear();
+    this.router.navigateByUrl('/login');
   }
 }

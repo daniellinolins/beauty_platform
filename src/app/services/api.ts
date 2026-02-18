@@ -41,7 +41,10 @@ export class ApiService {
     });
   }
 
-  getLatestFormVersion(tenantId: number, idForm: number): Observable<any | null> {
+  getLatestFormVersion(
+    tenantId: number,
+    idForm: number,
+  ): Observable<any | null> {
     return this.listFormVersions(tenantId, idForm).pipe(
       map((list) => (Array.isArray(list) && list.length ? list[0] : null)),
     );
@@ -75,9 +78,16 @@ export class ApiService {
   updateFormVersion(
     formId: number,
     formVersionId: number,
-    req: { tenant_id: number; version_status?: VersionStatus; schema_json?: any },
+    req: {
+      tenant_id: number;
+      version_status?: VersionStatus;
+      schema_json?: any;
+    },
   ): Observable<any> {
-    return this.http.put(`${this.baseUrl}/forms/${formId}/versions/${formVersionId}`, req);
+    return this.http.put(
+      `${this.baseUrl}/forms/${formId}/versions/${formVersionId}`,
+      req,
+    );
   }
 
   createFormVersion(req: {
@@ -93,23 +103,40 @@ export class ApiService {
     });
   }
 
-  getFormVersion(formId: number, versionId: number, tenantId: number): Observable<any> {
-    return this.http.get(`${this.baseUrl}/forms/${formId}/versions/${versionId}`, {
-      params: { tenant_id: tenantId },
-    });
+  getFormVersion(
+    formId: number,
+    versionId: number,
+    tenantId: number,
+  ): Observable<any> {
+    return this.http.get(
+      `${this.baseUrl}/forms/${formId}/versions/${versionId}`,
+      {
+        params: { tenant_id: tenantId },
+      },
+    );
   }
 
+  /**
+   * ✅ FIX: backend legado exige tenant_id no BODY (não só na querystring).
+   * Mantemos mode na query.
+   */
   publishFormVersion(req: {
     tenant_id: number;
     id_form: number;
     id_form_version: number;
     mode?: 'replace' | 'error';
+    schema_obj?: any; // opcional: ajuda validação no backend
   }): Observable<any> {
     const mode = req.mode || 'replace';
+
+    // ✅ tenant_id no body
+    const body: any = { tenant_id: req.tenant_id };
+    if (req.schema_obj) body.schema_obj = req.schema_obj;
+
     return this.http.post(
       `${this.baseUrl}/forms/${req.id_form}/versions/${req.id_form_version}/publish`,
-      null,
-      { params: { tenant_id: req.tenant_id, mode } },
+      body,
+      { params: { mode } },
     );
   }
 
@@ -130,6 +157,9 @@ export class ApiService {
     });
   }
 
+  /**
+   * LEGACY submission (mantido)
+   */
   createSubmission(req: {
     tenant_id: number;
     clinic_id: number;
@@ -140,11 +170,18 @@ export class ApiService {
     return this.http.post(`${this.baseUrl}/form-submissions`, req);
   }
 
-  saveSubmissionPayload(submissionId: number, tenantId: number, payload: any): Observable<any> {
-    return this.http.put(`${this.baseUrl}/form-submissions/${submissionId}/payload`, {
-      tenant_id: tenantId,
-      payload_json: payload,
-    });
+  saveSubmissionPayload(
+    submissionId: number,
+    tenantId: number,
+    payload: any,
+  ): Observable<any> {
+    return this.http.put(
+      `${this.baseUrl}/form-submissions/${submissionId}/payload`,
+      {
+        tenant_id: tenantId,
+        payload_json: payload,
+      },
+    );
   }
 
   uploadFile(
@@ -160,5 +197,73 @@ export class ApiService {
     fd.append('category', category);
     fd.append('purpose', purpose);
     return this.http.post(`${this.baseUrl}/files`, fd);
+  }
+
+  // -------------------------------
+  // SECURE (recomendado)
+  // -------------------------------
+  secureCreateSubmission(req: {
+    clinic_id: number;
+    client_id?: number; // obrigatório para clínica, opcional para CLIENT
+    id_form: number;
+    id_form_version: number;
+  }): Observable<any> {
+    return this.http.post(`${this.baseUrl}/secure/form-submissions`, req);
+  }
+
+  secureSaveSubmissionPayload(id: number, payload: any): Observable<any> {
+    return this.http.put(
+      `${this.baseUrl}/secure/form-submissions/${id}/payload`,
+      {
+        payload_json: payload,
+      },
+    );
+  }
+
+  secureFinalizeSubmission(id: number): Observable<any> {
+    return this.http.post(
+      `${this.baseUrl}/secure/form-submissions/${id}/finalize`,
+      {},
+    );
+  }
+
+  // -------------------------------
+  // CLIENTS (secure)
+  // -------------------------------
+  secureListClinicClients(
+    clinicId: number,
+    status: 'ACTIVE' | 'PENDING' | 'ALL' = 'ACTIVE',
+  ): Observable<any[]> {
+    return this.http.get<any[]>(
+      `${this.baseUrl}/secure/clinics/${clinicId}/clients`,
+      { params: { status } },
+    );
+  }
+
+  secureRequestLinkExistingClient(
+    clinicId: number,
+    emailOrPhone: string,
+    channel: 'INBOX' | 'EMAIL' = 'INBOX',
+  ): Observable<any> {
+    return this.http.post<any>(
+      `${this.baseUrl}/secure/clinics/${clinicId}/clients/request-link`,
+      { email_or_phone: emailOrPhone, channel },
+    );
+  }
+
+  secureCreateClientAndRequestLink(
+    clinicId: number,
+    req: {
+      full_name: string;
+      email: string;
+      phone?: string;
+      temp_password?: string;
+      channel?: 'INBOX' | 'EMAIL';
+    },
+  ): Observable<any> {
+    return this.http.post<any>(
+      `${this.baseUrl}/secure/clinics/${clinicId}/clients/create-and-request-link`,
+      req,
+    );
   }
 }

@@ -11,6 +11,13 @@ from routes.submissions import bp_submissions
 from routes.files import bp_files
 
 
+from routes.forms_versions import bp_secure_forms_versions
+
+from routes.secure_clients import bp_secure_clients
+
+
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     CORS(app)
@@ -98,6 +105,18 @@ def create_app() -> Flask:
         app.register_blueprint(bp_secure_form_versions)
     except Exception:
         pass
+
+    try:
+        from routes.setup import bp_setup
+        app.register_blueprint(bp_setup)
+    except Exception:
+        pass
+
+    
+    app.register_blueprint(bp_secure_forms_versions)
+
+    app.register_blueprint(bp_secure_clients)
+
 
 
     return app

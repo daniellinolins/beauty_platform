@@ -11,6 +11,35 @@
   <ion-spinner *ngIf="loading" name="crescent"></ion-spinner>
 
   <div *ngIf="!loading">
+
+    <!-- ✅ Seleção de cliente para usuário CLÍNICA -->
+    <ion-card *ngIf="clientSelectionRequired">
+      <ion-card-header>
+        <ion-card-title>Selecione um cliente</ion-card-title>
+        <ion-card-subtitle>
+          Para salvar esta submissão, escolha um cliente associado a esta clínica.
+        </ion-card-subtitle>
+      </ion-card-header>
+
+      <ion-card-content>
+        <ion-button expand="block" (click)="openClientPicker()">
+          Selecionar cliente
+        </ion-button>
+
+        <ion-note style="display:block; margin-top: 8px;">
+          Dica: se não houver clientes na lista, você precisa solicitar/confirmar a associação do cliente com a clínica.
+        </ion-note>
+      </ion-card-content>
+    </ion-card>
+
+    <!-- ✅ mostra qual cliente foi selecionado -->
+    <ion-card *ngIf="!clientSelectionRequired && selectedClientLabel">
+      <ion-card-content>
+        <strong>Cliente selecionado:</strong>
+        <div style="margin-top: 6px;">{{ selectedClientLabel }}</div>
+      </ion-card-content>
+    </ion-card>
+
     <app-form-renderer
       [mode]="'fill'"
       [tenantId]="tenantId"
@@ -21,8 +50,17 @@
       (error)="onRendererError($event)"
     ></app-form-renderer>
 
-    <ion-button expand="block" style="margin-top: 16px;" (click)="save()">
+    <ion-button
+      expand="block"
+      style="margin-top: 16px;"
+      (click)="save()"
+      [disabled]="creatingSubmission || submissionId <= 0"
+    >
       Salvar
     </ion-button>
+
+    <ion-note *ngIf="creatingSubmission" style="display:block; margin-top: 8px;">
+      Preparando submissão...
+    </ion-note>
   </div>
 </ion-content>

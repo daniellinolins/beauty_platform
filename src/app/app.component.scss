@@ -117,3 +117,8 @@ ion-note {
 ion-item.selected {
   --color: var(--ion-color-primary);
 }
+
+.logout-item {
+  margin-top: 20px;
+  border-top: 1px solid var(--ion-color-light);
+}

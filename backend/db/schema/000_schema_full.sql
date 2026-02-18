@@ -51,7 +51,7 @@ CREATE TABLE `client` (
   KEY `ix_client_phone` (`phone`),
   CONSTRAINT `fk_client_first_clinic` FOREIGN KEY (`first_clinic_id`) REFERENCES `clinic` (`clinic_id`),
   CONSTRAINT `fk_client_first_tenant` FOREIGN KEY (`first_tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -85,7 +85,7 @@ CREATE TABLE `client_clinic` (
   CONSTRAINT `fk_cc_client` FOREIGN KEY (`client_id`) REFERENCES `client` (`client_id`),
   CONSTRAINT `fk_cc_clinic` FOREIGN KEY (`clinic_id`) REFERENCES `clinic` (`clinic_id`),
   CONSTRAINT `fk_cc_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -121,7 +121,7 @@ CREATE TABLE `client_clinic_authorization` (
   CONSTRAINT `fk_auth_client` FOREIGN KEY (`client_id`) REFERENCES `client` (`client_id`),
   CONSTRAINT `fk_auth_clinic` FOREIGN KEY (`clinic_id`) REFERENCES `clinic` (`clinic_id`),
   CONSTRAINT `fk_auth_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -159,7 +159,7 @@ CREATE TABLE `clinic` (
   KEY `fk_clinic_logo_file` (`logo_file_id`),
   CONSTRAINT `fk_clinic_logo_file` FOREIGN KEY (`logo_file_id`) REFERENCES `file_object` (`id_file_object`),
   CONSTRAINT `fk_clinic_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -184,7 +184,7 @@ CREATE TABLE `contact_verification` (
   KEY `ix_ver_user_purpose` (`user_id`,`purpose`),
   KEY `ix_ver_status` (`status`),
   CONSTRAINT `fk_ver_user` FOREIGN KEY (`user_id`) REFERENCES `user_account` (`user_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -211,7 +211,7 @@ CREATE TABLE `file_object` (
   KEY `ix_file_tenant` (`tenant_id`),
   KEY `ix_file_sha` (`tenant_id`,`sha256`),
   CONSTRAINT `fk_file_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=114 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=119 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -240,7 +240,7 @@ CREATE TABLE `form` (
   KEY `ix_form_tenant` (`tenant_id`),
   KEY `ix_form_status` (`tenant_id`,`status`),
   CONSTRAINT `fk_form_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=42 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=48 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -354,7 +354,7 @@ CREATE TABLE `form_submission` (
   CONSTRAINT `fk_submission_form_version` FOREIGN KEY (`id_form_version`) REFERENCES `form_version` (`id_form_version`),
   CONSTRAINT `fk_submission_pdf_file` FOREIGN KEY (`pdf_file_id`) REFERENCES `file_object` (`id_file_object`),
   CONSTRAINT `fk_submission_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=84 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=89 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -454,7 +454,7 @@ CREATE TABLE `form_version` (
   KEY `ix_form_version_form_status` (`id_form`,`status`),
   CONSTRAINT `fk_form_version_form` FOREIGN KEY (`id_form`) REFERENCES `form` (`id_form`),
   CONSTRAINT `fk_form_version_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=56 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=64 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -486,7 +486,7 @@ CREATE TABLE `notification` (
   KEY `ix_notif_tenant` (`tenant_id`,`sent_at`),
   CONSTRAINT `fk_notif_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`),
   CONSTRAINT `fk_notif_user` FOREIGN KEY (`user_id`) REFERENCES `user_account` (`user_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -589,7 +589,7 @@ CREATE TABLE `tenant` (
   KEY `fk_tenant_loginbg_file` (`login_bg_file_id`),
   CONSTRAINT `fk_tenant_loginbg_file` FOREIGN KEY (`login_bg_file_id`) REFERENCES `file_object` (`id_file_object`),
   CONSTRAINT `fk_tenant_logo_file` FOREIGN KEY (`logo_file_id`) REFERENCES `file_object` (`id_file_object`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -624,7 +624,7 @@ CREATE TABLE `tenant_subscription` (
   KEY `fk_ts_plan` (`plan_id`),
   CONSTRAINT `fk_ts_plan` FOREIGN KEY (`plan_id`) REFERENCES `subscription_plan` (`plan_id`),
   CONSTRAINT `fk_ts_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -683,7 +683,7 @@ CREATE TABLE `user_account` (
   KEY `ix_user_phone_verified` (`phone_verified`),
   CONSTRAINT `fk_user_client` FOREIGN KEY (`client_id`) REFERENCES `client` (`client_id`),
   CONSTRAINT `fk_user_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -715,7 +715,7 @@ CREATE TABLE `user_clinic` (
   CONSTRAINT `fk_uc_clinic` FOREIGN KEY (`clinic_id`) REFERENCES `clinic` (`clinic_id`),
   CONSTRAINT `fk_uc_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenant` (`tenant_id`),
   CONSTRAINT `fk_uc_user` FOREIGN KEY (`user_id`) REFERENCES `user_account` (`user_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -742,6 +742,131 @@ SET character_set_client = @saved_cs_client;
 --
 -- Dumping routines for database 'beauty_platform'
 --
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'NO_ZERO_IN_DATE,NO_ZERO_DATE,NO_ENGINE_SUBSTITUTION' */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `sp_recalc_saldo_mes_anterior` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_general_ci */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `sp_recalc_saldo_mes_anterior`(
+    IN p_id_livro_caixa INT,
+    IN p_dt_referencia DATE
+)
+BEGIN
+    DECLARE v_dt_mes DATE;
+    DECLARE v_dt_limite DATE;
+    DECLARE v_dt_prox_mes DATE;
+    DECLARE v_dt_mes_anterior DATE;
+
+    DECLARE v_id_conta_saldo INT;
+    DECLARE v_saldo_inicial DECIMAL(12,2);
+    DECLARE v_movimento DECIMAL(12,2);
+    DECLARE v_saldo_final DECIMAL(12,2);
+
+    -- conta do saldo (por igreja do livro)
+    SELECT cc.ID_CONTA_CONTABIL
+      INTO v_id_conta_saldo
+      FROM conta_contabil cc
+     WHERE cc.CODIGO = '0'
+       AND cc.DESCRICAO = 'SALDO_ANTERIOR'
+       AND cc.ID_IGREJA = (
+            SELECT lc.ID_IGREJA
+              FROM livro_caixa lc
+             WHERE lc.id_livro_caixa = p_id_livro_caixa
+            LIMIT 1
+       )
+     LIMIT 1;
+
+    IF v_id_conta_saldo IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Conta contábil de saldo (CODIGO=0, DESCRICAO=SALDO_ANTERIOR) não encontrada para a igreja do livro.';
+    END IF;
+
+    -- primeiro dia do mês afetado
+    SET v_dt_mes = DATE_SUB(p_dt_referencia, INTERVAL DAY(p_dt_referencia) - 1 DAY);
+
+    -- primeiro dia do mês atual
+    SET v_dt_limite = DATE_SUB(CURDATE(), INTERVAL DAY(CURDATE()) - 1 DAY);
+
+    WHILE v_dt_mes <= v_dt_limite DO
+
+        SET v_dt_mes_anterior = DATE_SUB(v_dt_mes, INTERVAL 1 MONTH);
+
+        -- saldo inicial do mês = saldo final do mês anterior (registrado como saldo_mes_ref = mês anterior)
+        SELECT COALESCE(MAX(r.valor), 0)
+          INTO v_saldo_inicial
+          FROM registo_livro_caixa r
+         WHERE r.id_livro_caixa = p_id_livro_caixa
+           AND r.id_conta_contabil = v_id_conta_saldo
+           AND r.saldo_mes_ref = v_dt_mes_anterior;
+
+        -- movimento do mês (entradas - saídas), ignorando qualquer linha de saldo
+        SELECT COALESCE(SUM(
+                   CASE
+                     WHEN cc.DOM_NATUREZA IN ('ENTRADA','RECEITA','CREDITO') THEN COALESCE(r.valor,0)
+                     WHEN cc.DOM_NATUREZA IN ('SAIDA','DESPESA','DEBITO')   THEN -COALESCE(r.valor,0)
+                     ELSE 0
+                   END
+               ), 0)
+          INTO v_movimento
+          FROM registo_livro_caixa r
+          JOIN conta_contabil cc
+            ON cc.ID_CONTA_CONTABIL = r.id_conta_contabil
+         WHERE r.id_livro_caixa = p_id_livro_caixa
+           AND r.dt_referencia >= v_dt_mes
+           AND r.dt_referencia <  DATE_ADD(v_dt_mes, INTERVAL 1 MONTH)
+           AND r.saldo_mes_ref IS NULL         -- garante: saldo não entra no movimento
+           AND r.id_conta_contabil <> v_id_conta_saldo
+           AND (r.dom_ativo IS NULL OR r.dom_ativo = 'SIM');
+
+        SET v_saldo_final = v_saldo_inicial + v_movimento;
+
+        -- grava no mês seguinte
+        SET v_dt_prox_mes = DATE_ADD(v_dt_mes, INTERVAL 1 MONTH);
+
+        INSERT INTO registo_livro_caixa
+            (id_livro_caixa,
+             id_conta_contabil,
+             dom_legenda,
+             descricao,
+             dt_referencia,
+             saldo_mes_ref,
+             valor,
+             dt_registo,
+             dom_ativo,
+             dom_origem_registo)
+        VALUES
+            (p_id_livro_caixa,
+             v_id_conta_saldo,
+             '0',
+             'Saldo do mês anterior',
+             v_dt_prox_mes,
+             v_dt_mes,            -- mês fechado
+             v_saldo_final,
+             NOW(),
+             'SIM',
+             'AUTO_SALDO')
+        ON DUPLICATE KEY UPDATE
+             valor = VALUES(valor),
+             dt_referencia = VALUES(dt_referencia),
+             dt_registo = NOW(),
+             dom_ativo = 'SIM',
+             dom_origem_registo = 'AUTO_SALDO';
+
+        SET v_dt_mes = v_dt_prox_mes;
+
+    END WHILE;
+
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
 
 --
 -- Final view structure for view `v_client_clinics`
@@ -770,4 +895,4 @@ SET character_set_client = @saved_cs_client;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-02-17 10:09:01
+-- Dump completed on 2026-02-18 22:21:23
